@@ -1,0 +1,129 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+venv/
+ENV/
+env/
+.venv
+
+# Environment Variables & Secrets
+.env
+.env.local
+.env.*.local
+*.env
+.env.*
+config.local.py
+secrets.py
+credentials.json
+credentials.yaml
+token.txt
+*.pem
+*.key
+*.crt
+*.cert
+id_rsa*
+id_ed25519*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.code-workspace
+
+# Logs
+*.log
+logs/
+error.log
+debug.log
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+data/
+database/
+
+# Docker
+docker-compose.override.yml
+.dockerignore
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.cache
+
+# Backup files
+*.bak
+backup*.sql
+*.backup
+
+# Pytest
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Brain artifacts (Gemini)
+.gemini/
+
+# OS
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Session files
+*.session
+*.session-journal
+
+# Telegram specific
+session.string
+*.session-journal
+my_account.session
+
+# Upload scripts (contains credentials after first run)
+.git-credentials
+
+# Local notes and todos
+TODO.local.md
+NOTES.local.md
+*.local.md
+
+# Temporary documentation and cleanup files
+*_DEPLOY.md
+*_FIX.md
+*_GUIDE.md
+*_SYNC.md
+FEATURES.md
+PUSH_TO_*.md
+*_clean.txt
+*_CLEAN.txt
+CLEANUP_LIST.txt

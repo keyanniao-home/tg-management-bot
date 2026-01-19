@@ -1,0 +1,23 @@
+[project]
+name = "telegram-group-management"
+version = "0.1.0"
+description = "Telegram Group Management Bot with PostgreSQL"
+requires-python = ">=3.12"
+dependencies = [
+    "psycopg2-binary>=2.9.11",
+    "sqlmodel>=0.0.31",
+    "python-telegram-bot[all]>=21.10",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "python-dotenv>=1.0.0",
+    "loguru>=0.7.0",
+    "telethon>=1.42.0",
+    "imagehash>=4.3.1",
+    "pillow>=10.0.0",
+    "openai>=2.15.0",
+    "toon-format",
+    "pyyaml>=6.0.3",
+]
+
+[tool.uv.sources]
+toon-format = { git = "https://github.com/toon-format/toon-python.git" }

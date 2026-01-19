@@ -1,0 +1,43 @@
+-- 初始化数据库时创建默认分类和标签的SQL脚本
+
+-- 插入默认分类
+-- 注意：这些只是示例，实际使用时需要根据群组ID动态插入
+
+-- 默认分类（管理员需要在初始化群组后手动创建）
+-- /kobe_add_category 教程 "各类技术教程"
+-- /kobe_add_category 工具 "实用工具和软件"
+-- /kobe_add_category 脚本 "代码脚本"
+-- /kobe_add_category 节点数据 "网络节点配置"
+-- /kobe_add_category 视频 "视频资源"
+-- /kobe_add_category 文档 "技术文档"
+
+-- 默认标签（管理员需要在初始化群组后手动创建）
+-- /kobe_add_tag Python
+-- /kobe_add_tag AI
+-- /kobe_add_tag Docker
+-- /kobe_add_tag Linux
+-- /kobe_add_tag Windows
+-- /kobe_add_tag 前端
+-- /kobe_add_tag 后端
+-- /kobe_add_tag 网络
+-- /kobe_add_tag 安全
+-- /kobe_add_tag 数据库
+
+-- 说明：
+-- 由于分类和标签需要关联到特定的group_id，
+-- 建议通过Bot命令在初始化群组后手动创建。
+-- 
+-- 如果需要为特定群组批量创建，可以使用以下模板：
+-- (替换 YOUR_GROUP_ID 为实际的群组ID)
+--
+-- INSERT INTO categories (group_id, name, description) VALUES
+-- (YOUR_GROUP_ID, '教程', '各类技术教程'),
+-- (YOUR_GROUP_ID, '工具', '实用工具和软件'),
+-- (YOUR_GROUP_ID, '脚本', '代码脚本'),
+-- (YOUR_GROUP_ID, '节点数据', '网络节点配置');
+--
+-- INSERT INTO tags (group_id, name) VALUES
+-- (YOUR_GROUP_ID, 'Python'),
+-- (YOUR_GROUP_ID, 'AI'),
+-- (YOUR_GROUP_ID, 'Docker'),
+-- (YOUR_GROUP_ID, 'Linux');
