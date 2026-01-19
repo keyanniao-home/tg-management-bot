@@ -1,0 +1,725 @@
+"""
+数据库迁移系统
+
+自动检测并执行数据库结构变更
+"""
+from datetime import datetime, UTC
+from loguru import logger
+from sqlalchemy import text, inspect
+from sqlmodel import Session, select
+from app.database.connection import engine
+
+
+class Migration:
+    """单个迁移定义"""
+
+    def __init__(self, version: int, description: str):
+        self.version = version
+        self.description = description
+
+    def check(self, session: Session) -> bool:
+        """检查是否需要执行迁移（返回True表示需要执行）"""
+        raise NotImplementedError
+
+    def execute(self, session: Session):
+        """执行迁移"""
+        raise NotImplementedError
+
+    def rollback(self, session: Session):
+        """回滚迁移（可选）"""
+        raise NotImplementedError
+
+
+class Migration001_RemoveChannelBindingGroupId(Migration):
+    """
+    迁移001: 删除 channel_bindings 表的 group_id 字段
+
+    变更内容:
+    - 删除外键约束 channel_bindings_group_id_fkey
+    - 删除字段 group_id
+    - 改为全局共享绑定
+    """
+
+    def __init__(self):
+        super().__init__(
+            version=1,
+            description="Remove group_id from channel_bindings table (global shared binding)"
+        )
+
+    def check(self, session: Session) -> bool:
+        """检查 channel_bindings 表是否存在 group_id 字段"""
+        try:
+            inspector = inspect(engine)
+
+            # 检查表是否存在
+            if 'channel_bindings' not in inspector.get_table_names():
+                logger.info("channel_bindings 表不存在，跳过迁移")
+                return False
+
+            # 检查 group_id 字段是否存在
+            columns = inspector.get_columns('channel_bindings')
+            column_names = [col['name'] for col in columns]
+
+            if 'group_id' in column_names:
+                logger.warning(f"检测到旧版本数据库结构: channel_bindings 表存在 group_id 字段")
+                return True
+            else:
+                logger.info("channel_bindings 表已是最新结构")
+                return False
+
+        except Exception as e:
+            logger.error(f"检查迁移状态失败: {e}")
+            return False
+
+    def execute(self, session: Session):
+        """执行迁移"""
+        logger.info("=" * 80)
+        logger.info(f"开始执行迁移 #{self.version}: {self.description}")
+        logger.info("=" * 80)
+
+        try:
+            # 1. 删除外键约束
+            logger.info("Step 1/3: 删除外键约束...")
+            session.exec(text("""
+                ALTER TABLE channel_bindings
+                DROP CONSTRAINT IF EXISTS channel_bindings_group_id_fkey;
+            """))
+            session.commit()  # DDL 需要立即提交
+            logger.info("✅ 外键约束已删除")
+
+            # 2. 处理重复数据（如果同一频道在多个群组绑定，保留最新的）
+            logger.info("Step 2/3: 检查并处理重复数据...")
+            duplicates = session.exec(text("""
+                SELECT channel_id, COUNT(*) as cnt
+                FROM channel_bindings
+                GROUP BY channel_id
+                HAVING COUNT(*) > 1
+            """)).fetchall()
+
+            if duplicates:
+                logger.warning(f"发现 {len(duplicates)} 个频道存在多次绑定，保留最新记录...")
+                before_count = session.exec(text("SELECT COUNT(*) FROM channel_bindings")).first()[0]
+                session.exec(text("""
+                    DELETE FROM channel_bindings
+                    WHERE id NOT IN (
+                        SELECT MAX(id)
+                        FROM channel_bindings
+                        GROUP BY channel_id
+                    )
+                """))
+                session.commit()  # DML 也立即提交
+                after_count = session.exec(text("SELECT COUNT(*) FROM channel_bindings")).first()[0]
+                deleted_count = before_count - after_count
+                logger.info(f"✅ 已删除 {deleted_count} 条重复记录")
+            else:
+                logger.info("✅ 未发现重复数据")
+
+            # 3. 删除 group_id 字段
+            logger.info("Step 3/3: 删除 group_id 字段...")
+            session.exec(text("""
+                ALTER TABLE channel_bindings
+                DROP COLUMN IF EXISTS group_id;
+            """))
+            session.commit()  # DDL 需要立即提交
+            logger.info("✅ group_id 字段已删除")
+
+            # 验证
+            logger.info("验证迁移结果...")
+            inspector = inspect(engine)
+            columns = inspector.get_columns('channel_bindings')
+            column_names = [col['name'] for col in columns]
+
+            if 'group_id' not in column_names:
+                current_count = session.exec(text("SELECT COUNT(*) FROM channel_bindings")).first()[0]
+                logger.info(f"✅ 验证通过，当前记录数: {current_count}")
+            else:
+                raise Exception("验证失败: group_id 字段仍然存在")
+
+            logger.info("=" * 80)
+            logger.success(f"🎉 迁移 #{self.version} 执行成功！")
+            logger.info("=" * 80)
+
+        except Exception as e:
+            logger.error(f"❌ 迁移失败: {e}")
+            session.rollback()
+            logger.error("⚠️ 事务已回滚")
+            logger.error("⚠️ 如需恢复数据，请使用您的备份！")
+            raise
+
+    def rollback(self, session: Session):
+        """
+        回滚迁移（需要手动提供备份）
+
+        注意：此方法假设你已经有数据库备份
+        回滚前请确保已经恢复备份到数据库
+        """
+        logger.warning("⚠️ 回滚功能需要手动操作：")
+        logger.warning("1. 从备份恢复数据库")
+        logger.warning("2. 或者手动执行以下 SQL：")
+        logger.warning("   ALTER TABLE channel_bindings ADD COLUMN group_id BIGINT;")
+        logger.warning("   ALTER TABLE channel_bindings ADD CONSTRAINT channel_bindings_group_id_fkey FOREIGN KEY (group_id) REFERENCES group_configs(id);")
+        logger.warning("   CREATE INDEX ix_channel_bindings_group_id ON channel_bindings(group_id);")
+        raise NotImplementedError("回滚需要手动操作，请联系 DBA")
+
+
+class Migration002_AddMessageMetadata(Migration):
+    """
+    迁移002: 为 messages 表添加 extra_data 字段
+
+    变更内容:
+    - 添加 extra_data JSONB 字段（可空）
+    - 用于存储扩展信息，如图片检测结果等
+    """
+
+    def __init__(self):
+        super().__init__(
+            version=2,
+            description="Add extra_data JSONB field to messages table"
+        )
+
+    def check(self, session: Session) -> bool:
+        """检查 messages 表是否缺少 extra_data 字段"""
+        try:
+            inspector = inspect(engine)
+
+            # 检查表是否存在
+            if 'messages' not in inspector.get_table_names():
+                logger.info("messages 表不存在，跳过迁移")
+                return False
+
+            # 检查 extra_data 字段是否存在
+            columns = inspector.get_columns('messages')
+            column_names = [col['name'] for col in columns]
+
+            if 'extra_data' not in column_names:
+                logger.warning(f"检测到旧版本数据库结构: messages 表缺少 extra_data 字段")
+                return True
+            else:
+                logger.info("messages 表已包含 extra_data 字段")
+                return False
+
+        except Exception as e:
+            logger.error(f"检查迁移状态失败: {e}")
+            return False
+
+    def execute(self, session: Session):
+        """执行迁移"""
+        logger.info("=" * 80)
+        logger.info(f"开始执行迁移 #{self.version}: {self.description}")
+        logger.info("=" * 80)
+
+        try:
+            # 添加 extra_data 字段
+            logger.info("Step 1/1: 添加 extra_data 字段...")
+            session.exec(text("""
+                ALTER TABLE messages
+                ADD COLUMN IF NOT EXISTS extra_data JSONB;
+            """))
+            session.commit()
+            logger.info("✅ extra_data 字段已添加")
+
+            # 验证
+            logger.info("验证迁移结果...")
+            inspector = inspect(engine)
+            columns = inspector.get_columns('messages')
+            column_names = [col['name'] for col in columns]
+
+            if 'extra_data' in column_names:
+                logger.info("✅ 验证通过")
+            else:
+                raise Exception("验证失败: extra_data 字段不存在")
+
+            logger.info("=" * 80)
+            logger.success(f"🎉 迁移 #{self.version} 执行成功！")
+            logger.info("=" * 80)
+
+        except Exception as e:
+            logger.error(f"❌ 迁移失败: {e}")
+            session.rollback()
+            logger.error("⚠️ 事务已回滚")
+            raise
+
+    def rollback(self, session: Session):
+        """回滚迁移"""
+        logger.info("回滚迁移002: 删除 extra_data 字段")
+        session.exec(text("ALTER TABLE messages DROP COLUMN IF EXISTS extra_data;"))
+        session.commit()
+        logger.info("✅ 回滚完成")
+
+
+class Migration003_AddUserProfileTables(Migration):
+    """
+    迁移003: 添加用户资料和频道爬取相关表
+
+    变更内容:
+    - 创建 user_profiles 表（用户详细资料）
+    - 创建 user_channels 表（用户关联的频道）
+    - 创建 channel_messages 表（频道消息）
+    - 创建 crawl_tasks 表（爬虫任务队列）
+    """
+
+    def __init__(self):
+        super().__init__(
+            version=3,
+            description="Add user_profiles, user_channels, channel_messages, and crawl_tasks tables"
+        )
+
+    def check(self, session: Session) -> bool:
+        """检查表是否需要创建"""
+        try:
+            inspector = inspect(engine)
+            tables = inspector.get_table_names()
+
+            # 只要有一个表不存在就需要执行迁移
+            required_tables = ['user_profiles', 'user_channels', 'channel_messages', 'crawl_tasks']
+            missing_tables = [t for t in required_tables if t not in tables]
+
+            if missing_tables:
+                logger.warning(f"检测到缺失的表: {', '.join(missing_tables)}")
+                return True
+            else:
+                logger.info("用户资料和频道爬取相关表已存在")
+                return False
+
+        except Exception as e:
+            logger.error(f"检查迁移状态失败: {e}")
+            return False
+
+    def execute(self, session: Session):
+        """执行迁移"""
+        logger.info("=" * 80)
+        logger.info(f"开始执行迁移 #{self.version}: {self.description}")
+        logger.info("=" * 80)
+
+        try:
+            # 1. 创建 user_profiles 表
+            logger.info("Step 1/4: 创建 user_profiles 表...")
+            session.exec(text("""
+                CREATE TABLE IF NOT EXISTS user_profiles (
+                    id SERIAL PRIMARY KEY,
+                    user_id BIGINT UNIQUE NOT NULL,
+                    username VARCHAR,
+                    first_name VARCHAR,
+                    last_name VARCHAR,
+                    phone VARCHAR,
+                    bio TEXT,
+                    is_bot BOOLEAN DEFAULT FALSE,
+                    is_verified BOOLEAN DEFAULT FALSE,
+                    is_restricted BOOLEAN DEFAULT FALSE,
+                    is_scam BOOLEAN DEFAULT FALSE,
+                    is_fake BOOLEAN DEFAULT FALSE,
+                    is_premium BOOLEAN DEFAULT FALSE,
+                    has_personal_channel BOOLEAN DEFAULT FALSE,
+                    personal_channel_id BIGINT,
+                    personal_channel_username VARCHAR,
+                    last_crawled_at TIMESTAMP,
+                    crawl_error TEXT,
+                    created_at TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMP NOT NULL
+                );
+
+                CREATE INDEX IF NOT EXISTS ix_user_profiles_user_id ON user_profiles(user_id);
+                CREATE INDEX IF NOT EXISTS ix_user_profiles_username ON user_profiles(username);
+            """))
+            session.commit()
+            logger.info("✅ user_profiles 表已创建")
+
+            # 2. 创建 user_channels 表
+            logger.info("Step 2/4: 创建 user_channels 表...")
+            session.exec(text("""
+                CREATE TABLE IF NOT EXISTS user_channels (
+                    id SERIAL PRIMARY KEY,
+                    user_profile_id INTEGER NOT NULL REFERENCES user_profiles(id),
+                    channel_id BIGINT NOT NULL,
+                    channel_username VARCHAR,
+                    channel_title VARCHAR,
+                    channel_about TEXT,
+                    subscribers_count INTEGER DEFAULT 0,
+                    is_personal_channel BOOLEAN DEFAULT FALSE,
+                    is_crawled BOOLEAN DEFAULT FALSE,
+                    last_crawled_at TIMESTAMP,
+                    created_at TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMP NOT NULL
+                );
+
+                CREATE INDEX IF NOT EXISTS ix_user_channels_user_profile_id ON user_channels(user_profile_id);
+                CREATE INDEX IF NOT EXISTS ix_user_channels_channel_id ON user_channels(channel_id);
+                CREATE INDEX IF NOT EXISTS ix_user_channels_channel_username ON user_channels(channel_username);
+            """))
+            session.commit()
+            logger.info("✅ user_channels 表已创建")
+
+            # 3. 创建 channel_messages 表
+            logger.info("Step 3/4: 创建 channel_messages 表...")
+            session.exec(text("""
+                CREATE TABLE IF NOT EXISTS channel_messages (
+                    id SERIAL PRIMARY KEY,
+                    channel_id INTEGER NOT NULL REFERENCES user_channels(id),
+                    message_id BIGINT NOT NULL,
+                    text TEXT,
+                    has_media BOOLEAN DEFAULT FALSE,
+                    media_type VARCHAR,
+                    is_pinned BOOLEAN DEFAULT FALSE,
+                    views INTEGER DEFAULT 0,
+                    forwards INTEGER DEFAULT 0,
+                    posted_at TIMESTAMP NOT NULL,
+                    edited_at TIMESTAMP,
+                    created_at TIMESTAMP NOT NULL
+                );
+
+                CREATE INDEX IF NOT EXISTS ix_channel_messages_channel_id ON channel_messages(channel_id);
+                CREATE INDEX IF NOT EXISTS ix_channel_messages_message_id ON channel_messages(message_id);
+            """))
+            session.commit()
+            logger.info("✅ channel_messages 表已创建")
+
+            # 4. 创建 crawl_tasks 表
+            logger.info("Step 4/4: 创建 crawl_tasks 表...")
+            session.exec(text("""
+                CREATE TABLE IF NOT EXISTS crawl_tasks (
+                    id SERIAL PRIMARY KEY,
+                    group_id INTEGER NOT NULL REFERENCES group_configs(id),
+                    crawl_channels BOOLEAN DEFAULT FALSE,
+                    channel_depth INTEGER DEFAULT 10,
+                    status VARCHAR NOT NULL DEFAULT 'pending',
+                    total_users INTEGER DEFAULT 0,
+                    processed_users INTEGER DEFAULT 0,
+                    failed_users INTEGER DEFAULT 0,
+                    current_user_id BIGINT,
+                    progress_message TEXT,
+                    error_message TEXT,
+                    created_by_user_id BIGINT NOT NULL,
+                    created_by_username VARCHAR,
+                    created_at TIMESTAMP NOT NULL,
+                    started_at TIMESTAMP,
+                    completed_at TIMESTAMP,
+                    updated_at TIMESTAMP NOT NULL
+                );
+
+                CREATE INDEX IF NOT EXISTS ix_crawl_tasks_group_id ON crawl_tasks(group_id);
+                CREATE INDEX IF NOT EXISTS ix_crawl_tasks_status ON crawl_tasks(status);
+            """))
+            session.commit()
+            logger.info("✅ crawl_tasks 表已创建")
+
+            # 验证
+            logger.info("验证迁移结果...")
+            inspector = inspect(engine)
+            tables = inspector.get_table_names()
+
+            required_tables = ['user_profiles', 'user_channels', 'channel_messages', 'crawl_tasks']
+            if all(t in tables for t in required_tables):
+                logger.info("✅ 验证通过，所有表已创建")
+            else:
+                raise Exception("验证失败: 部分表未创建成功")
+
+            logger.info("=" * 80)
+            logger.success(f"🎉 迁移 #{self.version} 执行成功！")
+            logger.info("=" * 80)
+
+        except Exception as e:
+            logger.error(f"❌ 迁移失败: {e}")
+            session.rollback()
+            logger.error("⚠️ 事务已回滚")
+            raise
+
+    def rollback(self, session: Session):
+        """回滚迁移"""
+        logger.info("回滚迁移003: 删除用户资料和频道爬取相关表")
+        session.exec(text("""
+            DROP TABLE IF EXISTS channel_messages CASCADE;
+            DROP TABLE IF EXISTS user_channels CASCADE;
+            DROP TABLE IF EXISTS crawl_tasks CASCADE;
+            DROP TABLE IF EXISTS user_profiles CASCADE;
+        """))
+        session.commit()
+        logger.info("✅ 回滚完成")
+
+
+class Migration004_AddScammerDetectionRecords(Migration):
+    """
+    迁移004: 添加号商检测记录表
+
+    变更内容:
+    - 创建 scammer_detection_records 表
+    - 用于存储号商检测结果和缓存
+    """
+
+    def __init__(self):
+        super().__init__(
+            version=4,
+            description="Add scammer_detection_records table"
+        )
+
+    def check(self, session: Session) -> bool:
+        """检查 scammer_detection_records 表是否存在"""
+        try:
+            inspector = inspect(engine)
+            tables = inspector.get_table_names()
+
+            if 'scammer_detection_records' not in tables:
+                logger.warning("检测到需要添加 scammer_detection_records 表")
+                return True
+            else:
+                logger.info("scammer_detection_records 表已存在")
+                return False
+
+        except Exception as e:
+            logger.error(f"检查迁移状态失败: {e}")
+            return False
+
+    def execute(self, session: Session):
+        """执行迁移"""
+        logger.info("=" * 80)
+        logger.info(f"开始执行迁移 #{self.version}: {self.description}")
+        logger.info("=" * 80)
+
+        try:
+            # 创建 scammer_detection_records 表
+            logger.info("创建 scammer_detection_records 表...")
+            session.exec(text("""
+                CREATE TABLE IF NOT EXISTS scammer_detection_records (
+                    id SERIAL PRIMARY KEY,
+                    group_id BIGINT NOT NULL,
+                    user_id BIGINT,
+                    detection_type VARCHAR NOT NULL,
+                    is_scammer BOOLEAN NOT NULL,
+                    confidence FLOAT NOT NULL,
+                    evidence TEXT NOT NULL,
+                    user_snapshot JSON NOT NULL,
+                    crawl_task_id INTEGER,
+                    detected_by_user_id BIGINT NOT NULL,
+                    detected_at TIMESTAMP NOT NULL,
+                    is_kicked BOOLEAN NOT NULL DEFAULT FALSE,
+                    kicked_at TIMESTAMP,
+                    kicked_by_user_id BIGINT,
+                    expires_at TIMESTAMP,
+                    created_at TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMP NOT NULL
+                );
+
+                CREATE INDEX IF NOT EXISTS ix_scammer_detection_records_group_id
+                    ON scammer_detection_records(group_id);
+                CREATE INDEX IF NOT EXISTS ix_scammer_detection_records_user_id
+                    ON scammer_detection_records(user_id);
+                CREATE INDEX IF NOT EXISTS ix_scammer_detection_records_detection_type
+                    ON scammer_detection_records(detection_type);
+                CREATE INDEX IF NOT EXISTS ix_scammer_detection_records_detected_at
+                    ON scammer_detection_records(detected_at);
+                CREATE INDEX IF NOT EXISTS ix_scammer_detection_records_expires_at
+                    ON scammer_detection_records(expires_at);
+                CREATE INDEX IF NOT EXISTS ix_group_expires
+                    ON scammer_detection_records(group_id, expires_at);
+                CREATE INDEX IF NOT EXISTS ix_group_user_detected
+                    ON scammer_detection_records(group_id, user_id, detected_at);
+            """))
+            session.commit()
+            logger.info("✅ scammer_detection_records 表已创建")
+
+            # 验证
+            logger.info("验证迁移结果...")
+            inspector = inspect(engine)
+            tables = inspector.get_table_names()
+
+            if 'scammer_detection_records' in tables:
+                logger.info("✅ 验证通过，表已创建")
+            else:
+                raise Exception("验证失败: scammer_detection_records 表未创建成功")
+
+            logger.info("=" * 80)
+            logger.success(f"🎉 迁移 #{self.version} 执行成功！")
+            logger.info("=" * 80)
+
+        except Exception as e:
+            logger.error(f"❌ 迁移失败: {e}")
+            session.rollback()
+            logger.error("⚠️ 事务已回滚")
+            raise
+
+    def rollback(self, session: Session):
+        """回滚迁移"""
+        logger.info("回滚迁移004: 删除 scammer_detection_records 表")
+        session.exec(text("""
+            DROP TABLE IF EXISTS scammer_detection_records CASCADE;
+        """))
+        session.commit()
+        logger.info("✅ 回滚完成")
+
+
+class Migration005_AddCrawlTaskStatusFields(Migration):
+    """
+    迁移005: 添加爬虫任务状态消息字段
+
+    变更内容:
+    - 在 crawl_tasks 表中添加 status_chat_id 和 status_message_id 字段
+    - 用于在爬取过程中更新进度和发送完成消息
+    """
+
+    def __init__(self):
+        super().__init__(
+            version=5,
+            description="Add status_chat_id and status_message_id to crawl_tasks"
+        )
+
+    def check(self, session: Session) -> bool:
+        """检查 crawl_tasks 表是否缺少状态消息字段"""
+        try:
+            inspector = inspect(engine)
+
+            # 检查表是否存在
+            if 'crawl_tasks' not in inspector.get_table_names():
+                logger.info("crawl_tasks 表不存在，跳过迁移")
+                return False
+
+            # 检查字段是否存在
+            columns = inspector.get_columns('crawl_tasks')
+            column_names = [col['name'] for col in columns]
+
+            if 'status_chat_id' not in column_names or 'status_message_id' not in column_names:
+                logger.warning("检测到 crawl_tasks 表缺少状态消息字段")
+                return True
+            else:
+                logger.info("crawl_tasks 表已包含状态消息字段")
+                return False
+
+        except Exception as e:
+            logger.error(f"检查迁移状态失败: {e}")
+            return False
+
+    def execute(self, session: Session):
+        """执行迁移"""
+        logger.info("=" * 80)
+        logger.info(f"开始执行迁移 #{self.version}: {self.description}")
+        logger.info("=" * 80)
+
+        try:
+            # 检查字段是否已存在
+            inspector = inspect(engine)
+            columns = inspector.get_columns('crawl_tasks')
+            column_names = [col['name'] for col in columns]
+
+            # 添加 status_chat_id 字段
+            if 'status_chat_id' not in column_names:
+                logger.info("添加 status_chat_id 字段...")
+                session.exec(text("""
+                    ALTER TABLE crawl_tasks
+                    ADD COLUMN status_chat_id BIGINT;
+                """))
+                session.commit()
+                logger.info("✅ status_chat_id 字段已添加")
+            else:
+                logger.info("status_chat_id 字段已存在，跳过")
+
+            # 添加 status_message_id 字段
+            if 'status_message_id' not in column_names:
+                logger.info("添加 status_message_id 字段...")
+                session.exec(text("""
+                    ALTER TABLE crawl_tasks
+                    ADD COLUMN status_message_id BIGINT;
+                """))
+                session.commit()
+                logger.info("✅ status_message_id 字段已添加")
+            else:
+                logger.info("status_message_id 字段已存在，跳过")
+
+            # 验证
+            logger.info("验证迁移结果...")
+            inspector = inspect(engine)
+            columns = inspector.get_columns('crawl_tasks')
+            column_names = [col['name'] for col in columns]
+
+            if 'status_chat_id' in column_names and 'status_message_id' in column_names:
+                logger.info("✅ 验证通过，字段已添加")
+            else:
+                raise Exception("验证失败: 字段未添加成功")
+
+            logger.info("=" * 80)
+            logger.success(f"🎉 迁移 #{self.version} 执行成功！")
+            logger.info("=" * 80)
+
+        except Exception as e:
+            logger.error(f"❌ 迁移失败: {e}")
+            session.rollback()
+            logger.error("⚠️ 事务已回滚")
+            raise
+
+    def rollback(self, session: Session):
+        """回滚迁移"""
+        logger.info("回滚迁移005: 删除 crawl_tasks 的状态消息字段")
+        session.exec(text("""
+            ALTER TABLE crawl_tasks
+            DROP COLUMN IF EXISTS status_chat_id,
+            DROP COLUMN IF EXISTS status_message_id;
+        """))
+        session.commit()
+        logger.info("✅ 回滚完成")
+
+
+# 注册所有迁移
+ALL_MIGRATIONS = [
+    Migration001_RemoveChannelBindingGroupId(),
+    Migration002_AddMessageMetadata(),
+    Migration003_AddUserProfileTables(),
+    Migration004_AddScammerDetectionRecords(),
+    Migration005_AddCrawlTaskStatusFields(),
+]
+
+
+def run_migrations():
+    """
+    自动检测并执行所有待执行的迁移
+
+    返回: (成功数, 跳过数, 失败数)
+    """
+    logger.info("🔍 开始检查数据库迁移...")
+
+    success_count = 0
+    skipped_count = 0
+    failed_count = 0
+
+    with Session(engine) as session:
+        for migration in ALL_MIGRATIONS:
+            try:
+                # 检查是否需要执行
+                if not migration.check(session):
+                    logger.info(f"⏭️  迁移 #{migration.version} 已执行或不需要执行，跳过")
+                    skipped_count += 1
+                    continue
+
+                # 执行迁移
+                migration.execute(session)
+                success_count += 1
+
+            except Exception as e:
+                logger.error(f"❌ 迁移 #{migration.version} 执行失败: {e}")
+                failed_count += 1
+                # 继续执行下一个迁移（可选：改为 break 中断）
+                continue
+
+    # 输出总结
+    logger.info("=" * 80)
+    logger.info(f"📊 迁移执行完成: 成功 {success_count}, 跳过 {skipped_count}, 失败 {failed_count}")
+    logger.info("=" * 80)
+
+    if failed_count > 0:
+        logger.error("⚠️ 部分迁移失败，请检查日志并手动修复")
+        raise Exception(f"{failed_count} 个迁移失败")
+
+    return success_count, skipped_count, failed_count
+
+
+def check_migrations() -> bool:
+    """
+    检查是否有待执行的迁移
+
+    返回: True 表示有待执行的迁移
+    """
+    with Session(engine) as session:
+        for migration in ALL_MIGRATIONS:
+            try:
+                if migration.check(session):
+                    return True
+            except Exception as e:
+                logger.error(f"检查迁移 #{migration.version} 时出错: {e}")
+
+    return False

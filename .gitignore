@@ -66,7 +66,8 @@ debug.log
 *.sqlite3
 *.db-journal
 data/
-database/
+# 注意：不要使用 database/，会错误忽略 app/database 目录
+/database/
 
 # Docker
 docker-compose.override.yml
