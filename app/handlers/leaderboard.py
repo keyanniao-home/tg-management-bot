@@ -16,7 +16,7 @@ from app.utils.auto_delete import auto_delete_message
 from app.utils.rate_limiter import rate_limit_callback
 
 
-@auto_delete_message(delay=30, custom_delays={'leaderboard': 120})
+@auto_delete_message(delay=30, custom_delays={"leaderboard": 120})
 async def leaderboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     /kobe_leaderboard or /kobe_榜单
@@ -40,20 +40,20 @@ async def leaderboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         # Build leaderboard selection buttons
         keyboard = []
         for lb in enabled_leaderboards:
-            keyboard.append([
-                InlineKeyboardButton(
-                    f"{lb.emoji} {lb.display_name}",
-                    callback_data=f"lb_select:{lb.leaderboard_id}:1:7"  # default 7 days
-                )
-            ])
+            keyboard.append(
+                [
+                    InlineKeyboardButton(
+                        f"{lb.emoji} {lb.display_name}",
+                        callback_data=f"lb_select:{lb.leaderboard_id}:1:7",  # default 7 days
+                    )
+                ]
+            )
 
         reply_markup = InlineKeyboardMarkup(keyboard)
 
         text = "📊 *榜单列表*\n\n请选择要查看的榜单："
         return await update.message.reply_text(
-            text,
-            reply_markup=reply_markup,
-            parse_mode="Markdown"
+            text, reply_markup=reply_markup, parse_mode="Markdown"
         )
 
 
@@ -96,15 +96,27 @@ async def leaderboard_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             await query.edit_message_text("未知的操作")
 
     except (IndexError, ValueError) as e:
+        from loguru import logger
+
+        logger.error(f"Leaderboard callback data format error: {e}")
         await query.edit_message_text("数据格式错误")
     except Exception as e:
+        from loguru import logger
+
+        # Log the error for debugging
+        logger.error(f"Leaderboard callback error: {e}", exc_info=True)
         # Silently ignore "message not modified" errors
         error_msg = str(e)
         if "message is not modified" not in error_msg.lower():
-            await query.answer(f"操作失败: {error_msg}", show_alert=True)
+            try:
+                await query.answer(f"操作失败: {error_msg}", show_alert=True)
+            except Exception:
+                pass
 
 
-async def _show_leaderboard_view(query, lb_id: str, page: int, days: int, pattern_idx: int = 0):
+async def _show_leaderboard_view(
+    query, lb_id: str, page: int, days: int, pattern_idx: int = 0
+):
     """Display specific leaderboard with data."""
     with Session(engine) as session:
         statement = select(GroupConfig).where(
@@ -134,6 +146,7 @@ async def _show_leaderboard_view(query, lb_id: str, page: int, days: int, patter
 
             # Different message for night shift vs other leaderboards
             from app.handlers.leaderboards.night_shift import NightShiftLeaderboard
+
             if isinstance(leaderboard, NightShiftLeaderboard):
                 text = f"{title}\n\n最近一次值班时段暂无数据"
             else:
@@ -149,13 +162,16 @@ async def _show_leaderboard_view(query, lb_id: str, page: int, days: int, patter
             return
 
         # Format display
-        display_mode = group.config.get('leaderboard_display_mode',
-                                        group.config.get('stats_display_mode', 'mention'))
+        display_mode = group.config.get(
+            "leaderboard_display_mode",
+            group.config.get("stats_display_mode", "mention"),
+        )
         total_pages = (total_count + page_size - 1) // page_size
         page = min(max(page, 1), total_pages)  # Bounds check
 
         # Build title
         from app.handlers.leaderboards.night_shift import NightShiftLeaderboard
+
         title = f"{leaderboard.emoji} {leaderboard.display_name}"
 
         # Different title format for night shift
@@ -176,23 +192,20 @@ async def _show_leaderboard_view(query, lb_id: str, page: int, days: int, patter
 
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(
-            text,
-            reply_markup=reply_markup,
-            parse_mode="MarkdownV2"
+            text, reply_markup=reply_markup, parse_mode="MarkdownV2"
         )
 
 
-def _build_leaderboard_buttons(leaderboard, lb_id: str, page: int, days: int,
-                               total_pages: int, group_config: dict) -> list:
+def _build_leaderboard_buttons(
+    leaderboard, lb_id: str, page: int, days: int, total_pages: int, group_config: dict
+) -> list:
     """Build inline keyboard buttons for leaderboard navigation."""
     from app.handlers.leaderboards.night_shift import NightShiftLeaderboard
 
     keyboard = []
 
     # Row 1: Return to list button
-    keyboard.append([
-        InlineKeyboardButton("« 返回榜单列表", callback_data="lb_back")
-    ])
+    keyboard.append([InlineKeyboardButton("« 返回榜单列表", callback_data="lb_back")])
 
     # Row 2: Time range selector (only for non-night-shift leaderboards)
     if not isinstance(leaderboard, NightShiftLeaderboard):
@@ -249,17 +262,17 @@ async def _show_leaderboard_list(query):
 
         keyboard = []
         for lb in enabled_leaderboards:
-            keyboard.append([
-                InlineKeyboardButton(
-                    f"{lb.emoji} {lb.display_name}",
-                    callback_data=f"lb_select:{lb.leaderboard_id}:1:7"
-                )
-            ])
+            keyboard.append(
+                [
+                    InlineKeyboardButton(
+                        f"{lb.emoji} {lb.display_name}",
+                        callback_data=f"lb_select:{lb.leaderboard_id}:1:7",
+                    )
+                ]
+            )
 
         reply_markup = InlineKeyboardMarkup(keyboard)
         text = "📊 *榜单列表*\n\n请选择要查看的榜单："
         await query.edit_message_text(
-            text,
-            reply_markup=reply_markup,
-            parse_mode="Markdown"
+            text, reply_markup=reply_markup, parse_mode="Markdown"
         )

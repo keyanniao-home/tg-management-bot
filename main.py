@@ -54,6 +54,7 @@ from app.handlers.summary_handlers import (
     search_messages_command,
 )
 from app.handlers.dm_handlers import dm_command, dm_handlers, my_dms_command
+from app.handlers.dm_rating_handlers import dm_rating_command, dm_rating_callback
 from app.handlers.message_query_handlers import (
     query_messages_command,
     query_messages_callback,
@@ -228,6 +229,10 @@ def main():
     # DM命令
     application.add_handler(CommandHandler("dm", dm_command))
     application.add_handler(CommandHandler("my_dms", my_dms_command))
+    application.add_handler(CommandHandler("dm_rating", dm_rating_command))
+    application.add_handler(
+        CallbackQueryHandler(dm_rating_callback, pattern="^dm_rank_")
+    )
 
     # 资源管理命令
     application.add_handler(upload_conversation)

@@ -68,10 +68,7 @@ class LeaderboardRegistry:
         self._sync_keyword_leaderboards(group_config)
 
         # Then return all enabled leaderboards
-        return [
-            lb for lb in self._leaderboards.values()
-            if lb.is_enabled(group_config)
-        ]
+        return [lb for lb in self._leaderboards.values() if lb.is_enabled(group_config)]
 
     def _sync_keyword_leaderboards(self, group_config: dict):
         """
@@ -83,28 +80,29 @@ class LeaderboardRegistry:
         from .keyword import KeywordLeaderboard
 
         # Remove all existing keyword leaderboards
-        keyword_ids = [lb_id for lb_id in self._leaderboards.keys()
-                      if lb_id.startswith('keyword_')]
+        keyword_ids = [
+            lb_id for lb_id in self._leaderboards.keys() if lb_id.startswith("keyword_")
+        ]
         for lb_id in keyword_ids:
             self.unregister(lb_id)
 
         # Get keyword patterns from config
-        keyword_config = group_config.get('leaderboards', {}).get('keyword', {})
-        if not keyword_config.get('enabled', False):
+        keyword_config = group_config.get("leaderboards", {}).get("keyword", {})
+        if not keyword_config.get("enabled", False):
             return
 
-        patterns = keyword_config.get('patterns', [])
+        patterns = keyword_config.get("patterns", [])
 
         # Register a new leaderboard instance for each pattern
         for idx, pattern in enumerate(patterns):
-            pattern_name = pattern.get('name', f'关键字榜{idx+1}')
-            pattern_regex = pattern.get('regex', '')
+            pattern_name = pattern.get("name", f"关键字榜{idx + 1}")
+            pattern_regex = pattern.get("regex", "")
 
             if pattern_regex:  # Only register if regex is not empty
                 leaderboard = KeywordLeaderboard(
                     pattern_name=pattern_name,
                     pattern_regex=pattern_regex,
-                    pattern_index=idx
+                    pattern_index=idx,
                 )
                 self.register(leaderboard)
 
@@ -130,12 +128,14 @@ def _register_static_leaderboards():
     from .activity import ActivityLeaderboard
     from .time_activity import TimeActivityLeaderboard
     from .nsfw import NsfwLeaderboard
+    from .dm_rating import DMRatingLeaderboard
 
     registry.register(NightShiftLeaderboard())
     registry.register(DoneLeaderboard())
     registry.register(ActivityLeaderboard())
     registry.register(TimeActivityLeaderboard())
     registry.register(NsfwLeaderboard())
+    registry.register(DMRatingLeaderboard())
     # Note: Keyword leaderboards are registered dynamically per-group
 
 
@@ -144,9 +144,4 @@ _register_static_leaderboards()
 
 
 # Public exports
-__all__ = [
-    'BaseLeaderboard',
-    'LeaderboardEntry',
-    'LeaderboardRegistry',
-    'registry'
-]
+__all__ = ["BaseLeaderboard", "LeaderboardEntry", "LeaderboardRegistry", "registry"]

@@ -10,11 +10,10 @@ engine = create_engine(
 )
 
 
-
 def create_db_and_tables():
     """创建数据库表和视图"""
     from loguru import logger
-    
+
     # 导入所有模型以确保SQLModel能创建表
     from app.models.group import GroupConfig
     from app.models.member import GroupMember
@@ -26,13 +25,14 @@ def create_db_and_tables():
     from app.models.crawl_task import CrawlTask
     from app.models.summary import MessageSummary
     from app.models.db_version import DBVersion
-    
+
     # 导入新增的资源管理模型
     from app.models.category import Category
     from app.models.tag import Tag
     from app.models.resource import Resource, ResourceTag, ResourceEdit
     from app.models.dm_relay import DMRelay, DMReadReceipt
-    
+    from app.models.dm_detection import DMDetection, DMDetectionLog
+
     logger.info("开始创建数据库表...")
 
     # 创建表
@@ -42,6 +42,7 @@ def create_db_and_tables():
     logger.info("检查数据库迁移...")
     try:
         from app.database.migrations import run_migrations
+
         run_migrations()
     except Exception as e:
         logger.error(f"数据库迁移失败: {e}")
@@ -68,7 +69,7 @@ def get_session():
 def refresh_message_stats():
     """刷新消息统计物化视图"""
     from app.database.views import REFRESH_MESSAGE_STATS_MATERIALIZED_VIEW
+
     with Session(engine) as session:
         session.exec(text(REFRESH_MESSAGE_STATS_MATERIALIZED_VIEW))
         session.commit()
-
