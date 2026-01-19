@@ -105,6 +105,27 @@ INIT_SECRET_KEY = str(uuid.uuid4())
 
 async def post_init(application: Application):
     """Application 初始化后的钩子，在事件循环中运行"""
+
+    # 设置 Bot 命令列表（输入 / 时自动弹出）
+    from telegram import BotCommand
+
+    commands = [
+        BotCommand("help", "显示帮助信息"),
+        BotCommand("checkin", "每日签到"),
+        BotCommand("points", "查看我的积分"),
+        BotCommand("points_rank", "积分排行榜"),
+        BotCommand("search_user", "搜索用户消息"),
+        BotCommand("summary", "AI总结群组消息"),
+        BotCommand("resources", "资源浏览面板"),
+        BotCommand("search", "搜索资源"),
+        BotCommand("upload", "上传文件资源"),
+        BotCommand("id", "查询用户信息"),
+        BotCommand("leaderboard", "发言排行榜"),
+        BotCommand("bd", "绑定频道"),
+    ]
+    await application.bot.set_my_commands(commands)
+    logger.info("Bot 命令列表已设置")
+
     image_queue.start()
     logger.info("图片检测队列已启动")
 
