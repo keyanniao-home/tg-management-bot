@@ -436,19 +436,25 @@ python -m pytest
 
 ---
 
+## TODO List
+
+- [ ] 修改机器人识别指令为回复机器人对应消息
+- [ ] 优化BOT总结系统提示词
+- [ ] 优化删除逻辑
+
 ## 🙏 致谢
 
 - [python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot) - Telegram Bot API 库
 - [SQLModel](https://github.com/tiangolo/sqlmodel) - SQL 数据库 ORM
 - [Loguru](https://github.com/Delgan/loguru) - 优雅的日志库
-科研鸟与wdy的所有大佬们
+科研鸟与wdy的所有支持的大佬们-小爱佬、Kar佬、F佬、韩神、BS佬
 ---
 
 ## 📞 支持
 
 - 📧 Email: your-email@example.com
-- 💬 Telegram: [@your_username](https://t.me/your_username)
-- 🐛 Issues: [GitHub Issues](https://github.com/your-username/telegram-group-bot/issues)
+- 💬 Telegram: [keyanniao](https://t.me/my_username)
+- 🐛 Issues: [keyanniao](https://github.com/keyanniao/tg-managenment-bot/issues)
 
 ---
 
