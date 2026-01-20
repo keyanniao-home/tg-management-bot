@@ -69,7 +69,8 @@ class LLMService:
 2. 按主题分类归纳讨论的要点
 3. 突出重要信息（如技术方案、资源分享、问题解答等）
 4. 保持简洁，控制在300字以内
-5. 使用markdown格式，使用bullet points"""
+5. 直接输出Markdown格式文本，使用bullet points（-）、粗体（**文本**）等基础语法
+6. 不要使用代码块（```）包裹输出内容，Telegram会自动渲染Markdown"""
 
             user_prompt = f"""请总结以下聊天记录：
 
