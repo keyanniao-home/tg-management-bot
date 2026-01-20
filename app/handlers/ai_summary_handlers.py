@@ -22,6 +22,7 @@ from loguru import logger
 SUMMARY_STATE_KEY = "ai_summary_state"
 
 
+@auto_delete_message(delay=120)
 async def ai_summary_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     /ai_summary - AI消息总结面板
@@ -55,7 +56,9 @@ async def ai_summary_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 请选择条件后点击\"开始AI总结\"："""
 
-    await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+    return await update.message.reply_text(
+        text, reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 
 
 async def ai_summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):

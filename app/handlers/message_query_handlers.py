@@ -21,6 +21,7 @@ from loguru import logger
 QUERY_STATE_KEY = "message_query_state"
 
 
+@auto_delete_message(delay=120)
 async def query_messages_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     /query_messages - 消息查询面板
@@ -63,7 +64,9 @@ async def query_messages_command(update: Update, context: ContextTypes.DEFAULT_T
 
 请选择查询条件后点击"开始查询"："""
 
-    await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+    return await update.message.reply_text(
+        text, reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 
 
 async def query_messages_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
