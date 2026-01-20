@@ -14,6 +14,7 @@ from app.database.connection import engine
 from app.models import Category, Tag, Resource, ResourceTag
 from app.services.resource_service import CategoryService, TagService
 from app.utils.auto_delete import auto_delete_message
+from app.utils.reply_handler_manager import reply_handler_manager
 from loguru import logger
 
 
@@ -140,10 +141,17 @@ async def category_management_callback(
                 await query.answer("分类不存在", show_alert=True)
                 return
 
-            await query.edit_message_text(
+            bot_msg = await query.edit_message_text(
                 f"✏️ 编辑分类: {category.name}\n\n请回复此消息输入新的分类名称："
             )
+            # 注册回复处理器，保存 category_id 到 user_data
             context.user_data["editing_category_id"] = category_id
+            reply_handler_manager.register(
+                bot_message_id=bot_msg.message_id,
+                chat_id=update.effective_chat.id,
+                handler=handle_category_edit_input,
+                handler_name="category_edit_input"
+            )
 
     elif data.startswith("catmgmt_del_") and not data.startswith(
         "catmgmt_del_confirm_"
@@ -224,10 +232,17 @@ async def tag_management_callback(update: Update, context: ContextTypes.DEFAULT_
                 await query.answer("标签不存在", show_alert=True)
                 return
 
-            await query.edit_message_text(
+            bot_msg = await query.edit_message_text(
                 f"✏️ 编辑标签: #{tag.name}\n\n请回复此消息输入新的标签名称："
             )
+            # 注册回复处理器，保存 tag_id 到 user_data
             context.user_data["editing_tag_id"] = tag_id
+            reply_handler_manager.register(
+                bot_message_id=bot_msg.message_id,
+                chat_id=update.effective_chat.id,
+                handler=handle_tag_edit_input,
+                handler_name="tag_edit_input"
+            )
 
     elif data.startswith("tagmgmt_del_") and not data.startswith(
         "tagmgmt_del_confirm_"
@@ -297,7 +312,7 @@ async def tag_management_callback(update: Update, context: ContextTypes.DEFAULT_
 async def handle_category_edit_input(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ):
-    """处理分类编辑输入"""
+    """处理分类编辑输入（通过回复消息触发）"""
     category_id = context.user_data.get("editing_category_id")
     if not category_id:
         return
@@ -312,6 +327,9 @@ async def handle_category_edit_input(
         if not category:
             # 清除编辑状态
             del context.user_data["editing_category_id"]
+            # 注销回复处理器
+            if update.message.reply_to_message:
+                reply_handler_manager.unregister(update.message.reply_to_message.message_id)
             return await update.message.reply_text("❌ 分类不存在")
 
         old_name = category.name
@@ -321,6 +339,10 @@ async def handle_category_edit_input(
 
         # 清除编辑状态
         del context.user_data["editing_category_id"]
+        # 注销回复处理器（编辑成功）
+        if update.message.reply_to_message:
+            reply_handler_manager.unregister(update.message.reply_to_message.message_id)
+
         return await update.message.reply_text(
             f"✅ 分类已更新\n\n{old_name} → {new_name}"
         )
@@ -328,7 +350,7 @@ async def handle_category_edit_input(
 
 @auto_delete_message(delay=120)
 async def handle_tag_edit_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """处理标签编辑输入"""
+    """处理标签编辑输入（通过回复消息触发）"""
     tag_id = context.user_data.get("editing_tag_id")
     if not tag_id:
         return
@@ -343,6 +365,9 @@ async def handle_tag_edit_input(update: Update, context: ContextTypes.DEFAULT_TY
         if not tag:
             # 清除编辑状态
             del context.user_data["editing_tag_id"]
+            # 注销回复处理器
+            if update.message.reply_to_message:
+                reply_handler_manager.unregister(update.message.reply_to_message.message_id)
             return await update.message.reply_text("❌ 标签不存在")
 
         old_name = tag.name
@@ -352,6 +377,10 @@ async def handle_tag_edit_input(update: Update, context: ContextTypes.DEFAULT_TY
 
         # 清除编辑状态
         del context.user_data["editing_tag_id"]
+        # 注销回复处理器（编辑成功）
+        if update.message.reply_to_message:
+            reply_handler_manager.unregister(update.message.reply_to_message.message_id)
+
         return await update.message.reply_text(
             f"✅ 标签已更新\n\n#{old_name} → #{new_name}"
         )

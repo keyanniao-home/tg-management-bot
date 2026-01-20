@@ -15,6 +15,7 @@ from sqlmodel import Session, select, and_
 from app.database.connection import engine
 from app.models import GroupConfig, Message, GroupMember
 from app.utils.auto_delete import auto_delete_message
+from app.utils.reply_handler_manager import reply_handler_manager
 from loguru import logger
 
 
@@ -91,12 +92,17 @@ async def query_messages_callback(update: Update, context: ContextTypes.DEFAULT_
         query_type = data.split("_")[2]
 
         if query_type == "user":
-            # 需要用户输入user_id
-            await query.edit_message_text(
-                "👤 请输入要查询的用户ID：\n\n（发送数字ID后会自动执行查询）"
+            # 需要用户输入user_id，编辑消息并注册回复处理器
+            bot_msg = await query.edit_message_text(
+                "👤 请回复此消息输入要查询的用户ID（数字ID）："
             )
-            # 设置会话状态等待用户输入
-            context.user_data["waiting_user_id"] = True
+            # 注册回复处理器
+            reply_handler_manager.register(
+                bot_message_id=bot_msg.message_id,
+                chat_id=update.effective_chat.id,
+                handler=handle_user_id_input,
+                handler_name="query_user_id_input"
+            )
             return
 
         state["type"] = query_type
@@ -280,11 +286,7 @@ async def execute_message_query(query, state, group_id):
 
 @auto_delete_message(delay=120)
 async def handle_user_id_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """处理用户ID输入"""
-    # 检查是否在等待用户ID输入
-    if not context.user_data.get("waiting_user_id"):
-        return
-
+    """处理用户ID输入（通过回复消息触发）"""
     user_id_str = update.message.text.strip()
 
     # 验证是否是数字
@@ -293,8 +295,9 @@ async def handle_user_id_input(update: Update, context: ContextTypes.DEFAULT_TYP
 
     user_id = int(user_id_str)
 
-    # 清除等待状态
-    context.user_data["waiting_user_id"] = False
+    # 注销回复处理器（输入成功）
+    if update.message.reply_to_message:
+        reply_handler_manager.unregister(update.message.reply_to_message.message_id)
 
     # 更新查询状态
     state = context.user_data.get(QUERY_STATE_KEY, {})

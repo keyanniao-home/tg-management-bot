@@ -11,6 +11,8 @@ from app.models import GroupConfig, GroupMember, Message, GroupAdmin, ChannelBin
 from app.database.views import QUERY_INACTIVE_USERS
 from app.handlers.commands import is_admin
 from app.services.image_queue import image_queue
+from app.utils.reply_handler_manager import reply_handler_manager
+from app.utils.auto_delete import auto_delete_message
 import asyncio
 
 
@@ -300,12 +302,52 @@ async def _delete_channel_message(
         pass
 
 
+async def _delete_user_reply_later(bot, chat_id: int, message_id: int):
+    """120秒后删除用户的回复消息"""
+    await asyncio.sleep(120)
+    try:
+        await bot.delete_message(chat_id=chat_id, message_id=message_id)
+        logger.debug(f"已删除用户回复消息: {message_id}")
+    except Exception as e:
+        logger.debug(f"删除用户回复消息失败: {e}")
+
+
 async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """接收到消息事件"""
     if not update.message:
         return
 
     logger.debug("新消息")
+
+    # 检查是否是回复bot消息的文本消息
+    if (
+        update.effective_user
+        and update.message.reply_to_message
+        and update.message.text
+        and not update.message.text.startswith("/")
+    ):
+        # 检查回复的消息是否是bot发送的
+        bot_user = await context.bot.get_me()
+        if update.message.reply_to_message.from_user.id == bot_user.id:
+            # 检查是否有注册的回复处理器
+            bot_msg_id = update.message.reply_to_message.message_id
+            handler_info = reply_handler_manager.get_handler(bot_msg_id)
+
+            if handler_info:
+                logger.debug(
+                    f"触发回复处理器: {handler_info.handler_name} "
+                    f"(bot_msg_id={bot_msg_id}, user={update.effective_user.id})"
+                )
+                try:
+                    # 调用对应的处理器
+                    await handler_info.handler(update, context)
+                    # 标记用户消息，120s后删除
+                    asyncio.create_task(
+                        _delete_user_reply_later(context.bot, update.effective_chat.id, update.message.message_id)
+                    )
+                except Exception as e:
+                    logger.exception(f"回复处理器执行失败: ",e)
+                return
 
     # 检查是否是回复确认消息（只有文本消息且用户可以确认）
     if (

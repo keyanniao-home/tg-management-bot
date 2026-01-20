@@ -16,6 +16,7 @@ from app.database.connection import engine
 from app.models import GroupConfig, Message, GroupMember
 from app.services.llm_service import llm_service
 from app.utils.auto_delete import auto_delete_message
+from app.utils.reply_handler_manager import reply_handler_manager
 from loguru import logger
 
 
@@ -82,11 +83,17 @@ async def ai_summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         user_filter = data.split("_")[2]
 
         if user_filter == "specific":
-            # 需要用户输入user_id
-            await query.edit_message_text(
-                "👤 请输入要总结的用户ID：\n\n(发送数字ID后会自动返回面板)"
+            # 需要用户输入user_id，编辑消息并注册回复处理器
+            bot_msg = await query.edit_message_text(
+                "👤 请回复此消息输入要总结的用户ID（数字ID）："
             )
-            context.user_data["waiting_summary_user_id"] = True
+            # 注册回复处理器
+            reply_handler_manager.register(
+                bot_message_id=bot_msg.message_id,
+                chat_id=update.effective_chat.id,
+                handler=handle_summary_user_id_input,
+                handler_name="summary_user_id_input"
+            )
             return
 
         state["user_filter"] = user_filter
@@ -279,10 +286,7 @@ async def execute_ai_summary(query, state, group_id):
 async def handle_summary_user_id_input(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ):
-    """处理AI总结的用户ID输入"""
-    if not context.user_data.get("waiting_summary_user_id"):
-        return
-
+    """处理AI总结的用户ID输入（通过回复消息触发）"""
     user_id_str = update.message.text.strip()
 
     # 验证是否是数字
@@ -291,8 +295,9 @@ async def handle_summary_user_id_input(
 
     user_id = int(user_id_str)
 
-    # 清除等待状态
-    context.user_data["waiting_summary_user_id"] = False
+    # 注销回复处理器（输入成功）
+    if update.message.reply_to_message:
+        reply_handler_manager.unregister(update.message.reply_to_message.message_id)
 
     # 更新总结状态
     state = context.user_data.get(SUMMARY_STATE_KEY, {})

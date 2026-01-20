@@ -58,7 +58,6 @@ from app.handlers.dm_rating_handlers import dm_rating_command, dm_rating_callbac
 from app.handlers.message_query_handlers import (
     query_messages_command,
     query_messages_callback,
-    handle_user_id_input,
 )
 from app.handlers.digest_config_handlers import (
     digest_config_command,
@@ -67,7 +66,6 @@ from app.handlers.digest_config_handlers import (
 from app.handlers.ai_summary_handlers import (
     ai_summary_command,
     ai_summary_callback,
-    handle_summary_user_id_input,
 )
 
 # 导入新增的resource handlers
@@ -88,8 +86,6 @@ from app.handlers.category_management_handlers import (
     manage_tags_command,
     category_management_callback,
     tag_management_callback,
-    handle_category_edit_input,
-    handle_tag_edit_input,
 )
 from app.handlers.resource_management_handlers import (
     manage_resources_command,
@@ -293,20 +289,6 @@ def main():
     )
     application.add_handler(
         CallbackQueryHandler(ai_summary_callback, pattern="^aisum_")
-    )
-
-    # 用户输入处理器（查询和AI总结的用户ID输入，分类标签编辑）
-    # 使用 group=-2 确保在消息记录之前处理，但不阻止消息继续传播
-    async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """处理文本输入，不阻止消息传播"""
-        await handle_user_id_input(update, context)
-        await handle_summary_user_id_input(update, context)
-        await handle_category_edit_input(update, context)
-        await handle_tag_edit_input(update, context)
-        # 不返回任何值，让消息继续传播到 on_message
-
-    application.add_handler(
-        MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_input), group=-2
     )
 
     # 注册DM相关的回调处理器
