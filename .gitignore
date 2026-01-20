@@ -32,7 +32,7 @@ env/
 .env.local
 .env.*.local
 *.env
-.env.*
+
 config.local.py
 secrets.py
 credentials.json
