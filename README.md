@@ -53,7 +53,7 @@
 #### 1. 克隆项目
 
 ```bash
-git clone https://github.com/your-username/telegram-group-bot.git
+git clone https://github.com/keyanniao-home/tg-management-bot.git
 cd telegram-group-bot
 ```
 
