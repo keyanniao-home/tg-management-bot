@@ -54,7 +54,7 @@
 
 ```bash
 git clone https://github.com/keyanniao-home/tg-management-bot.git
-cd telegram-group-bot
+cd tg-management-bot
 ```
 
 #### 2. 配置环境变量
