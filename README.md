@@ -53,8 +53,8 @@
 #### 1. 克隆项目
 
 ```bash
-git clone https://github.com/your-username/telegram-group-bot.git
-cd telegram-group-bot
+git clone https://github.com/keyanniao-home/tg-management-bot.git
+cd tg-management-bot
 ```
 
 #### 2. 配置环境变量
