@@ -13,6 +13,7 @@ from app.config.settings import settings
 from app.database.connection import engine
 from app.models import GroupConfig, GroupAdmin
 from app.services.userbot import userbot_client, MemberImportService, crawler_queue
+from app.utils.message_utils import is_real_reply
 
 
 async def is_admin(update: Update) -> bool:
@@ -163,7 +164,7 @@ async def crawl_users_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         target_username = None
 
         # 检查是否是回复消息
-        if update.message.reply_to_message and update.message.reply_to_message.from_user:
+        if is_real_reply(update.message) and update.message.reply_to_message.from_user:
             target_user_id = update.message.reply_to_message.from_user.id
             target_username = update.message.reply_to_message.from_user.username
         # 检查是否提供了用户参数

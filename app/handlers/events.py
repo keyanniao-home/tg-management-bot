@@ -13,6 +13,7 @@ from app.handlers.commands import is_admin
 from app.services.image_queue import image_queue
 from app.utils.reply_handler_manager import reply_handler_manager
 from app.utils.auto_delete import auto_delete_message
+from app.utils.message_utils import is_real_reply
 import asyncio
 
 
@@ -322,7 +323,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 检查是否是回复bot消息的文本消息
     if (
         update.effective_user
-        and update.message.reply_to_message
+        and is_real_reply(update.message)
         and update.message.text
         and not update.message.text.startswith("/")
     ):
@@ -352,7 +353,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 检查是否是回复确认消息（只有文本消息且用户可以确认）
     if (
         update.effective_user
-        and update.message.reply_to_message
+        and is_real_reply(update.message)
         and update.message.text
         and update.message.text in ["确认", "确定", "confirm"]
     ):

@@ -9,6 +9,7 @@ from app.database.connection import engine
 from app.models import GroupConfig, GroupAdmin, GroupMember, BanRecord
 from app.utils.user_resolver import UserResolver
 from app.utils.auto_delete import auto_delete_message
+from app.utils.message_utils import is_real_reply
 
 
 @auto_delete_message(delay=30)
@@ -686,7 +687,7 @@ async def id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return await update.message.reply_text("群组未初始化")
 
         # 如果没有指定用户参数，直接查询自己（用户或频道）
-        if not context.args and not update.message.reply_to_message:
+        if not context.args and not is_real_reply(update.message):
             if update.message.sender_chat:
                 # 频道查询自己
                 target_user_id = update.message.sender_chat.id

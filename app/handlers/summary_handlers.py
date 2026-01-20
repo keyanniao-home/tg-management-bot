@@ -11,6 +11,7 @@ from sqlmodel import Session, select, and_
 from app.database.connection import engine
 from app.models import GroupConfig, Message, MessageSummary, GroupMember
 from app.services.llm_service import llm_service
+from app.utils.message_utils import is_real_reply
 
 
 async def summary_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -161,7 +162,7 @@ async def search_user_messages_command(
         return
 
     # 如果没有参数且没有回复消息，显示帮助
-    if not context.args and not update.message.reply_to_message:
+    if not context.args and not is_real_reply(update.message):
         await update.message.reply_text(
             "📝 使用方法: /search_user <用户ID/@用户名> [小时数]\n\n"
             "示例:\n"
@@ -207,7 +208,7 @@ async def search_user_messages_command(
                 hours_arg = context.args[1]
             # 如果是回复消息，第一个参数可能是小时数
             elif (
-                update.message.reply_to_message
+                is_real_reply(update.message)
                 and context.args[0].isdigit()
                 and int(context.args[0]) <= 168
             ):

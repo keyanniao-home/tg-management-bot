@@ -36,6 +36,9 @@ services:
     env_file:
       - .env
     environment:
+      # 时区配置
+      TZ: Asia/Shanghai
+      
       # 数据库配置（使用Docker网络中的服务名）
       DATABASE_HOST: postgres
       DATABASE_PORT: 5432

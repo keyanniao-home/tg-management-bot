@@ -12,6 +12,7 @@ from app.database.connection import engine
 from app.models import Resource, Category, Tag, ResourceTag
 from app.services.resource_service import ResourceService, CategoryService, TagService
 from app.services.points_service import PointsService
+from app.utils.message_utils import is_real_reply
 
 SELECTING_CATEGORY, SELECTING_TAGS, ENTERING_DESCRIPTION, CREATING_CATEGORY, CREATING_TAG = range(5)
 TEMP_RESOURCE_DATA = "temp_resource_data"
@@ -20,11 +21,11 @@ TEMP_RESOURCE_DATA = "temp_resource_data"
 async def upload_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.effective_chat:
         return
-    
-    if not update.message.reply_to_message:
+
+    if not is_real_reply(update.message):
         await update.message.reply_text("请回复一个包含文件的消息，然后发送 /upload 命令")
         return ConversationHandler.END
-    
+
     replied_message = update.message.reply_to_message
     file_id = None
     file_unique_id = None

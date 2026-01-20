@@ -18,9 +18,15 @@ class DMRelay(SQLModel, table=True):
     )
     
     # 发送者和接收者
-    from_user_id: int = Field(index=True, description="发送者用户ID")
+    from_user_id: int = Field(
+        sa_column=Column(BigInteger, nullable=False, index=True),
+        description="发送者用户ID"
+    )
     from_username: Optional[str] = Field(default=None, max_length=100, description="发送者用户名")
-    to_user_id: int = Field(index=True, description="接收者用户ID")
+    to_user_id: int = Field(
+        sa_column=Column(BigInteger, nullable=False, index=True),
+        description="接收者用户ID"
+    )
     to_username: Optional[str] = Field(default=None, max_length=100, description="接收者用户名")
     
     # 消息内容
@@ -47,5 +53,8 @@ class DMReadReceipt(SQLModel, table=True):
     
     id: Optional[int] = Field(default=None, primary_key=True)
     dm_relay_id: int = Field(foreign_key="dm_relays.id", unique=True, description="私信转达ID")
-    read_by: int = Field(description="确认已读的用户ID")
+    read_by: int = Field(
+        sa_column=Column(BigInteger, nullable=False),
+        description="确认已读的用户ID"
+    )
     read_at: datetime = Field(default_factory=datetime.utcnow, description="确认已读时间")

@@ -11,6 +11,7 @@ from telegram.error import Forbidden
 from sqlmodel import Session, select
 from app.database.connection import engine
 from app.models.dm_relay import DMRelay, DMReadReceipt
+from app.utils.message_utils import is_real_reply
 from loguru import logger
 
 
@@ -24,7 +25,7 @@ async def dm_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # 如果没有参数，或者只有一个参数且不是回复消息
-    has_reply = update.message.reply_to_message is not None
+    has_reply = is_real_reply(update.message)
 
     if not context.args and not has_reply:
         await update.message.reply_text(

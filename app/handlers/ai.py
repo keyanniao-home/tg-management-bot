@@ -13,6 +13,7 @@ import uuid
 
 from app.utils.auto_delete import auto_delete_message
 from app.utils.user_resolver import UserResolver
+from app.utils.message_utils import is_real_reply
 from app.database.connection import engine
 from app.models import GroupConfig, GroupAdmin, GroupMember
 from app.services.ai import user_profile_analyzer
@@ -294,7 +295,7 @@ async def handle_scammer_confirmation(update: Update, context: ContextTypes.DEFA
         return
 
     # 检查是否是回复检测结果消息
-    if update.message.reply_to_message and update.message.reply_to_message.message_id == pending['message_id']:
+    if is_real_reply(update.message) and update.message.reply_to_message.message_id == pending['message_id']:
         # 检查是否是管理员
         if not await is_admin(update):
             return await update.message.reply_text("❌ 只有管理员可以确认踢出")
@@ -472,7 +473,7 @@ async def analyze_user_command(update: Update, context: ContextTypes.DEFAULT_TYP
         # 指定了用户时，提取风格参数
         if context.args:
             # 如果是回复消息，第一个参数就是风格
-            if update.message.reply_to_message:
+            if is_real_reply(update.message):
                 style = context.args[0]
             # 如果通过参数指定用户，第二个参数才是风格
             elif len(context.args) > 1:

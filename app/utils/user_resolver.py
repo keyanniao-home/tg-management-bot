@@ -1,6 +1,7 @@
 from typing import Optional, Tuple
 from telegram import Update, User
 from sqlmodel import Session, select
+from app.utils.message_utils import is_real_reply
 
 
 class UserResolver:
@@ -25,7 +26,7 @@ class UserResolver:
         - group_id: 群组数据库ID（用于@username查询）
         """
         # 情况1: 回复消息
-        if update.message.reply_to_message:
+        if is_real_reply(update.message):
             # 判断是频道消息还是用户消息
             if update.message.reply_to_message.sender_chat:
                 # 频道消息
