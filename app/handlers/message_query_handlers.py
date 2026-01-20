@@ -14,6 +14,7 @@ from telegram.constants import ParseMode
 from sqlmodel import Session, select, and_
 from app.database.connection import engine
 from app.models import GroupConfig, Message, GroupMember
+from app.utils.auto_delete import auto_delete_message
 from loguru import logger
 
 
@@ -274,6 +275,7 @@ async def execute_message_query(query, state, group_id):
         await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
 
 
+@auto_delete_message(delay=120)
 async def handle_user_id_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """处理用户ID输入"""
     # 检查是否在等待用户ID输入
@@ -284,8 +286,7 @@ async def handle_user_id_input(update: Update, context: ContextTypes.DEFAULT_TYP
 
     # 验证是否是数字
     if not user_id_str.isdigit():
-        await update.message.reply_text("❌ 请输入有效的数字ID")
-        return
+        return await update.message.reply_text("❌ 请输入有效的数字ID")
 
     user_id = int(user_id_str)
 
@@ -343,4 +344,6 @@ async def handle_user_id_input(update: Update, context: ContextTypes.DEFAULT_TYP
 
 ✅ 已设置用户ID，点击"开始查询"："""
 
-    await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+    return await update.message.reply_text(
+        text, reply_markup=InlineKeyboardMarkup(keyboard)
+    )

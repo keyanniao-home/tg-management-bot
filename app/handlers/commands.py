@@ -20,7 +20,9 @@ async def init_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     # 先检查群组是否已经初始化
     with Session(engine) as session:
-        statement = select(GroupConfig).where(GroupConfig.group_id == update.effective_chat.id)
+        statement = select(GroupConfig).where(
+            GroupConfig.group_id == update.effective_chat.id
+        )
         group = session.exec(statement).first()
 
         if group and group.is_initialized:
@@ -30,18 +32,14 @@ async def init_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 验证密钥
     if not context.args or len(context.args) != 1:
         return await update.message.reply_text(
-            "❌ 请提供初始化密钥\n\n"
-            "用法: /kobe_init <密钥>"
+            "❌ 请提供初始化密钥\n\n用法: /kobe_init <密钥>"
         )
 
     provided_key = context.args[0]
-    init_secret_key = context.bot_data.get('init_secret_key')
+    init_secret_key = context.bot_data.get("init_secret_key")
 
     if provided_key != init_secret_key:
-        return await update.message.reply_text(
-            "❌ 密钥错误",
-            parse_mode="Markdown"
-        )
+        return await update.message.reply_text("❌ 密钥错误", parse_mode="Markdown")
 
     # 判断是用户还是频道执行
     is_channel = update.message.sender_chat is not None
@@ -58,7 +56,9 @@ async def init_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         executor_username = update.effective_user.username
 
     with Session(engine) as session:
-        statement = select(GroupConfig).where(GroupConfig.group_id == update.effective_chat.id)
+        statement = select(GroupConfig).where(
+            GroupConfig.group_id == update.effective_chat.id
+        )
         group = session.exec(statement).first()
 
         # 创建或更新群组配置
@@ -67,7 +67,7 @@ async def init_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 group_id=update.effective_chat.id,
                 group_name=update.effective_chat.title or "Unknown",
                 is_initialized=True,
-                initialized_by_user_id=executor_id
+                initialized_by_user_id=executor_id,
             )
             session.add(group)
             session.commit()
@@ -82,12 +82,12 @@ async def init_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             # 清除该群组的配置缓存
             from app.utils.channel_cache import group_config_cache
+
             group_config_cache.invalidate(update.effective_chat.id)
 
         # 设置初始化者为超级管理员
         statement = select(GroupAdmin).where(
-            GroupAdmin.group_id == group.id,
-            GroupAdmin.user_id == executor_id
+            GroupAdmin.group_id == group.id, GroupAdmin.user_id == executor_id
         )
         admin = session.exec(statement).first()
 
@@ -98,17 +98,20 @@ async def init_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 username=executor_username,
                 full_name=executor_name,
                 permission_level=1,  # 超级管理员
-                appointed_by_user_id=None  # 自己初始化
+                appointed_by_user_id=None,  # 自己初始化
             )
             session.add(admin)
             session.commit()
 
-        executor_mention = f"[{executor_name}](tg://user?id={executor_id})" if not is_channel else f"频道 {executor_name}"
+        executor_mention = (
+            f"[{executor_name}](tg://user?id={executor_id})"
+            if not is_channel
+            else f"频道 {executor_name}"
+        )
 
         return await update.message.reply_text(
-            f"✅ 群组初始化成功！\n\n"
-            f"初始化者 {executor_mention} 已成为超级管理员",
-            parse_mode="Markdown"
+            f"✅ 群组初始化成功！\n\n初始化者 {executor_mention} 已成为超级管理员",
+            parse_mode="Markdown",
         )
 
 
@@ -171,11 +174,12 @@ def format_help_text() -> str:
 {e("• 用户ID - 直接输入数字ID")}
 {e("• 回复消息 - 回复某条消息后使用命令")}"""
 
-@auto_delete_message(delay=30, custom_delays={'stats': 120, 'inactive': 240})
+
+@auto_delete_message(delay=30, custom_delays={"stats": 120, "inactive": 240})
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     显示帮助信息
-    
+
     说明：
     - 仅管理员可查看帮助
     - 消息会在30秒后自动删除
@@ -199,7 +203,9 @@ async def is_admin(update: Update) -> bool:
         return False
 
     with Session(engine) as session:
-        statement = select(GroupConfig).where(GroupConfig.group_id == update.effective_chat.id)
+        statement = select(GroupConfig).where(
+            GroupConfig.group_id == update.effective_chat.id
+        )
         group = session.exec(statement).first()
         if not group:
             return False
@@ -207,13 +213,13 @@ async def is_admin(update: Update) -> bool:
         statement = select(GroupAdmin).where(
             GroupAdmin.group_id == group.id,
             GroupAdmin.user_id == check_id,
-            GroupAdmin.is_active == True
+            GroupAdmin.is_active == True,
         )
         admin = session.exec(statement).first()
         return admin is not None
 
 
-@auto_delete_message(delay=30, custom_delays={'stats': 120, 'inactive': 240})
+@auto_delete_message(delay=30, custom_delays={"stats": 120, "inactive": 240})
 async def config_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     /config 键名 值
@@ -231,26 +237,29 @@ async def config_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # 尝试解析为JSON（支持数组和对象）
     import json
+
     try:
         value = json.loads(value)
     except (json.JSONDecodeError, TypeError):
         # 如果不是JSON，处理布尔值
-        if value.lower() in ['true', '1', 'yes', 'on']:
+        if value.lower() in ["true", "1", "yes", "on"]:
             value = True
-        elif value.lower() in ['false', '0', 'no', 'off']:
+        elif value.lower() in ["false", "0", "no", "off"]:
             value = False
 
     with Session(engine) as session:
-        statement = select(GroupConfig).where(GroupConfig.group_id == update.effective_chat.id)
+        statement = select(GroupConfig).where(
+            GroupConfig.group_id == update.effective_chat.id
+        )
         group = session.exec(statement).first()
 
         if not group:
             return await update.message.reply_text("群组未初始化")
 
         # 修改配置（支持点分隔的嵌套路径）
-        if '.' in key:
+        if "." in key:
             # 嵌套配置，使用点分隔路径
-            keys = key.split('.')
+            keys = key.split(".")
             current = group.config
             for k in keys[:-1]:
                 if k not in current:
@@ -268,12 +277,13 @@ async def config_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # 清除该群组的配置缓存
         from app.utils.channel_cache import group_config_cache
+
         group_config_cache.invalidate(update.effective_chat.id)
 
         return await update.message.reply_text(f"配置已更新: {key} = {value}")
 
 
-@auto_delete_message(delay=30, custom_delays={'stats': 120, 'inactive': 240})
+@auto_delete_message(delay=30, custom_delays={"stats": 120, "inactive": 240})
 async def ban_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     /ban [用户ID/@用户名/回复消息]
@@ -287,7 +297,9 @@ async def ban_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # 从数据库获取群组信息
     with Session(engine) as session:
-        statement = select(GroupConfig).where(GroupConfig.group_id == update.effective_chat.id)
+        statement = select(GroupConfig).where(
+            GroupConfig.group_id == update.effective_chat.id
+        )
         group = session.exec(statement).first()
         if not group:
             return await update.message.reply_text("群组未初始化")
@@ -295,7 +307,9 @@ async def ban_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # 解析目标用户（传入session和group.id用于@username查询）
         user_info = UserResolver.resolve(update, args, session, group.id)
         if not user_info:
-            return await update.message.reply_text("无法识别目标用户，请使用 /ban [天数] 用户ID/@用户名 或回复消息")
+            return await update.message.reply_text(
+                "无法识别目标用户，请使用 /ban [天数] 用户ID/@用户名 或回复消息"
+            )
 
         target_user_id, target_username, target_full_name = user_info
 
@@ -316,22 +330,25 @@ async def ban_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # 检查白名单（管理员、群组白名单、全局白名单）
         from app.config.settings import settings
+
         statement = select(GroupAdmin).where(
             GroupAdmin.group_id == group.id,
             GroupAdmin.user_id == target_user_id,
-            GroupAdmin.is_active == True
+            GroupAdmin.is_active == True,
         )
         if session.exec(statement).first():
             return await update.message.reply_text("❌ 无法封禁管理员")
 
-        if target_user_id in group.whitelist or target_user_id in settings.global_whitelist_ids:
+        if (
+            target_user_id in group.whitelist
+            or target_user_id in settings.global_whitelist_ids
+        ):
             return await update.message.reply_text("❌ 该用户在白名单中，无法封禁")
 
         # 如果只有ID，从数据库获取其他信息
         if not target_full_name:
             statement = select(GroupMember).where(
-                GroupMember.group_id == group.id,
-                GroupMember.user_id == target_user_id
+                GroupMember.group_id == group.id, GroupMember.user_id == target_user_id
             )
             member = session.exec(statement).first()
             if member:
@@ -345,7 +362,7 @@ async def ban_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             username=target_username,
             full_name=target_full_name or "Unknown",
             ban_days=None,  # 永久封禁
-            banned_by_admin_id=update.effective_user.id
+            banned_by_admin_id=update.effective_user.id,
         )
         session.add(ban)
         session.commit()
@@ -353,15 +370,16 @@ async def ban_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # 执行永久封禁
         try:
             await context.bot.ban_chat_member(
-                chat_id=update.effective_chat.id,
-                user_id=target_user_id
+                chat_id=update.effective_chat.id, user_id=target_user_id
             )
-            return await update.message.reply_text(f"已永久封禁用户 {target_full_name} ({target_user_id})")
+            return await update.message.reply_text(
+                f"已永久封禁用户 {target_full_name} ({target_user_id})"
+            )
         except Exception as e:
             return await update.message.reply_text(f"封禁失败: {str(e)}")
 
 
-@auto_delete_message(delay=30, custom_delays={'stats': 120, 'inactive': 240})
+@auto_delete_message(delay=30, custom_delays={"stats": 120, "inactive": 240})
 async def unban_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     /unban [用户ID/@用户名/回复消息]
@@ -371,7 +389,9 @@ async def unban_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return None
 
     with Session(engine) as session:
-        statement = select(GroupConfig).where(GroupConfig.group_id == update.effective_chat.id)
+        statement = select(GroupConfig).where(
+            GroupConfig.group_id == update.effective_chat.id
+        )
         group = session.exec(statement).first()
         if not group:
             return await update.message.reply_text("群组未初始化")
@@ -387,7 +407,7 @@ async def unban_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         statement = select(BanRecord).where(
             BanRecord.group_id == group.id,
             BanRecord.user_id == target_user_id,
-            BanRecord.is_active == True
+            BanRecord.is_active == True,
         )
         ban = session.exec(statement).first()
         if ban:
@@ -399,15 +419,16 @@ async def unban_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 执行解封
     try:
         await context.bot.unban_chat_member(
-            chat_id=update.effective_chat.id,
-            user_id=target_user_id
+            chat_id=update.effective_chat.id, user_id=target_user_id
         )
-        return await update.message.reply_text(f"已解封用户 {target_full_name} ({target_user_id})")
+        return await update.message.reply_text(
+            f"已解封用户 {target_full_name} ({target_user_id})"
+        )
     except Exception as e:
         return await update.message.reply_text(f"解封失败: {str(e)}")
 
 
-@auto_delete_message(delay=30, custom_delays={'stats': 120, 'inactive': 240})
+@auto_delete_message(delay=30, custom_delays={"stats": 120, "inactive": 240})
 async def kick_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     /kick [用户ID/@用户名/回复消息]
@@ -418,7 +439,9 @@ async def kick_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return None
 
     with Session(engine) as session:
-        statement = select(GroupConfig).where(GroupConfig.group_id == update.effective_chat.id)
+        statement = select(GroupConfig).where(
+            GroupConfig.group_id == update.effective_chat.id
+        )
         group = session.exec(statement).first()
         if not group:
             return await update.message.reply_text("群组未初始化")
@@ -447,33 +470,45 @@ async def kick_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # 检查白名单（管理员、群组白名单、全局白名单）
     with Session(engine) as session:
-        statement = select(GroupConfig).where(GroupConfig.group_id == update.effective_chat.id)
+        statement = select(GroupConfig).where(
+            GroupConfig.group_id == update.effective_chat.id
+        )
         group = session.exec(statement).first()
         if not group:
             return await update.message.reply_text("群组未初始化")
 
         from app.config.settings import settings
+
         statement = select(GroupAdmin).where(
             GroupAdmin.group_id == group.id,
             GroupAdmin.user_id == target_user_id,
-            GroupAdmin.is_active == True
+            GroupAdmin.is_active == True,
         )
         if session.exec(statement).first():
             return await update.message.reply_text("❌ 无法踢出管理员")
 
-        if target_user_id in group.whitelist or target_user_id in settings.global_whitelist_ids:
+        if (
+            target_user_id in group.whitelist
+            or target_user_id in settings.global_whitelist_ids
+        ):
             return await update.message.reply_text("❌ 该用户在白名单中，无法踢出")
 
     try:
         # 先封禁再解封，相当于踢出
-        await context.bot.ban_chat_member(chat_id=update.effective_chat.id, user_id=target_user_id)
-        await context.bot.unban_chat_member(chat_id=update.effective_chat.id, user_id=target_user_id)
-        return await update.message.reply_text(f"已踢出用户 {target_full_name} ({target_user_id})")
+        await context.bot.ban_chat_member(
+            chat_id=update.effective_chat.id, user_id=target_user_id
+        )
+        await context.bot.unban_chat_member(
+            chat_id=update.effective_chat.id, user_id=target_user_id
+        )
+        return await update.message.reply_text(
+            f"已踢出用户 {target_full_name} ({target_user_id})"
+        )
     except Exception as e:
         return await update.message.reply_text(f"踢出失败: {str(e)}")
 
 
-@auto_delete_message(delay=30, custom_delays={'stats': 120, 'inactive': 240})
+@auto_delete_message(delay=30, custom_delays={"stats": 120, "inactive": 240})
 async def setadmin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     /setadmin [用户ID/@用户名/回复消息]
@@ -489,7 +524,9 @@ async def setadmin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text("无法识别执行者")
 
     with Session(engine) as session:
-        statement = select(GroupConfig).where(GroupConfig.group_id == update.effective_chat.id)
+        statement = select(GroupConfig).where(
+            GroupConfig.group_id == update.effective_chat.id
+        )
         group = session.exec(statement).first()
         if not group:
             return await update.message.reply_text("群组未初始化")
@@ -499,7 +536,7 @@ async def setadmin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             GroupAdmin.group_id == group.id,
             GroupAdmin.user_id == executor_id,
             GroupAdmin.permission_level == 1,
-            GroupAdmin.is_active == True
+            GroupAdmin.is_active == True,
         )
         super_admin = session.exec(statement).first()
 
@@ -516,8 +553,7 @@ async def setadmin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # 从数据库获取完整用户信息
         if not target_full_name:
             statement = select(GroupMember).where(
-                GroupMember.group_id == group.id,
-                GroupMember.user_id == target_user_id
+                GroupMember.group_id == group.id, GroupMember.user_id == target_user_id
             )
             member = session.exec(statement).first()
             if member:
@@ -528,17 +564,21 @@ async def setadmin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         statement = select(GroupAdmin).where(
             GroupAdmin.group_id == group.id,
             GroupAdmin.user_id == target_user_id,
-            GroupAdmin.is_active == True
+            GroupAdmin.is_active == True,
         )
         existing_admin = session.exec(statement).first()
 
         if existing_admin:
             # 判断是频道还是用户
             if target_user_id < 0:
-                user_mention = f"@{target_username}" if target_username else target_full_name
+                user_mention = (
+                    f"@{target_username}" if target_username else target_full_name
+                )
             else:
                 user_mention = f"[{target_full_name}](tg://user?id={target_user_id})"
-            return await update.message.reply_text(f"{user_mention} 已经是管理员", parse_mode="Markdown")
+            return await update.message.reply_text(
+                f"{user_mention} 已经是管理员", parse_mode="Markdown"
+            )
 
         # 创建管理员
         new_admin = GroupAdmin(
@@ -547,24 +587,25 @@ async def setadmin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             username=target_username,
             full_name=target_full_name or "Unknown",
             permission_level=2,  # 普通管理员
-            appointed_by_user_id=executor_id
+            appointed_by_user_id=executor_id,
         )
         session.add(new_admin)
         session.commit()
 
         # 判断是频道还是用户
         if target_user_id < 0:
-            user_mention = f"@{target_username}" if target_username else target_full_name
+            user_mention = (
+                f"@{target_username}" if target_username else target_full_name
+            )
         else:
             user_mention = f"[{target_full_name}](tg://user?id={target_user_id})"
 
         return await update.message.reply_text(
-            f"✅ 已将 {user_mention} 设置为管理员",
-            parse_mode="Markdown"
+            f"✅ 已将 {user_mention} 设置为管理员", parse_mode="Markdown"
         )
 
 
-@auto_delete_message(delay=30, custom_delays={'stats': 120, 'inactive': 240})
+@auto_delete_message(delay=30, custom_delays={"stats": 120, "inactive": 240})
 async def admins_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     /admins
@@ -573,17 +614,20 @@ async def admins_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update):
         return None
     with Session(engine) as session:
-        statement = select(GroupConfig).where(GroupConfig.group_id == update.effective_chat.id)
+        statement = select(GroupConfig).where(
+            GroupConfig.group_id == update.effective_chat.id
+        )
         group = session.exec(statement).first()
 
         if not group:
             return await update.message.reply_text("群组未初始化")
 
         # 查询所有激活的管理员
-        statement = select(GroupAdmin).where(
-            GroupAdmin.group_id == group.id,
-            GroupAdmin.is_active == True
-        ).order_by(GroupAdmin.permission_level)
+        statement = (
+            select(GroupAdmin)
+            .where(GroupAdmin.group_id == group.id, GroupAdmin.is_active == True)
+            .order_by(GroupAdmin.permission_level)
+        )
 
         admins = session.exec(statement).all()
 
@@ -601,7 +645,9 @@ async def admins_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             for admin in super_admins:
                 # 判断是频道还是用户
                 if admin.user_id < 0:
-                    user_mention = f"@{admin.username}" if admin.username else admin.full_name
+                    user_mention = (
+                        f"@{admin.username}" if admin.username else admin.full_name
+                    )
                 else:
                     user_mention = f"[{admin.full_name}](tg://user?id={admin.user_id})"
                 message += f"• {user_mention}\n"
@@ -612,7 +658,9 @@ async def admins_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             for admin in normal_admins:
                 # 判断是频道还是用户
                 if admin.user_id < 0:
-                    user_mention = f"@{admin.username}" if admin.username else admin.full_name
+                    user_mention = (
+                        f"@{admin.username}" if admin.username else admin.full_name
+                    )
                 else:
                     user_mention = f"[{admin.full_name}](tg://user?id={admin.user_id})"
                 message += f"• {user_mention}\n"
@@ -620,7 +668,7 @@ async def admins_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text(message, parse_mode="Markdown")
 
 
-@auto_delete_message(delay=30, custom_delays={'stats': 120, 'inactive': 240})
+@auto_delete_message(delay=30, custom_delays={"stats": 120, "inactive": 240})
 async def id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     /id [用户ID/@用户名/回复消息]
@@ -629,7 +677,9 @@ async def id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update):
         return None
     with Session(engine) as session:
-        statement = select(GroupConfig).where(GroupConfig.group_id == update.effective_chat.id)
+        statement = select(GroupConfig).where(
+            GroupConfig.group_id == update.effective_chat.id
+        )
         group = session.exec(statement).first()
 
         if not group:
@@ -658,8 +708,7 @@ async def id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # 查询用户成员信息
         statement = select(GroupMember).where(
-            GroupMember.group_id == group.id,
-            GroupMember.user_id == target_user_id
+            GroupMember.group_id == group.id, GroupMember.user_id == target_user_id
         )
         member = session.exec(statement).first()
 
@@ -669,7 +718,11 @@ async def id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # 判断是频道还是用户
             if target_user_id < 0:
                 # 频道
-                user_mention = f"@{escape_markdown(target_username, version=2)}" if target_username else escaped_name
+                user_mention = (
+                    f"@{escape_markdown(target_username, version=2)}"
+                    if target_username
+                    else escaped_name
+                )
             else:
                 # 用户
                 user_mention = f"[{escaped_name}](tg://user?id={target_user_id})"
@@ -687,7 +740,7 @@ async def id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         statement = select(GroupAdmin).where(
             GroupAdmin.group_id == group.id,
             GroupAdmin.user_id == target_user_id,
-            GroupAdmin.is_active == True
+            GroupAdmin.is_active == True,
         )
         admin = session.exec(statement).first()
 
@@ -695,7 +748,7 @@ async def id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         statement = select(BanRecord).where(
             BanRecord.group_id == group.id,
             BanRecord.user_id == target_user_id,
-            BanRecord.is_active == True
+            BanRecord.is_active == True,
         )
         ban = session.exec(statement).first()
 
@@ -704,7 +757,11 @@ async def id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # 判断是频道还是用户
         if member.user_id < 0:
             # 频道
-            user_mention = f"@{escape_markdown(member.username, version=2)}" if member.username else escaped_name
+            user_mention = (
+                f"@{escape_markdown(member.username, version=2)}"
+                if member.username
+                else escaped_name
+            )
         else:
             # 用户
             user_mention = f"[{escaped_name}](tg://user?id={member.user_id})"
@@ -733,21 +790,33 @@ async def id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             message += f"状态: ❌ 已离开\n"
             if member.left_at:
                 # 转换为东八区时间
-                left_time_local = member.left_at.replace(tzinfo=UTC).astimezone(timezone(timedelta(hours=8)))
-                left_time = escape_markdown(left_time_local.strftime('%Y-%m-%d %H:%M'), version=2)
+                left_time_local = member.left_at.replace(tzinfo=UTC).astimezone(
+                    timezone(timedelta(hours=8))
+                )
+                left_time = escape_markdown(
+                    left_time_local.strftime("%Y-%m-%d %H:%M"), version=2
+                )
                 message += f"离开时间: {left_time}\n"
 
         # 加入信息
         message += f"\n📅 时间信息\n"
         # 转换为东八区时间
-        joined_time_local = member.joined_at.replace(tzinfo=UTC).astimezone(timezone(timedelta(hours=8)))
-        joined_time = escape_markdown(joined_time_local.strftime('%Y-%m-%d %H:%M'), version=2)
+        joined_time_local = member.joined_at.replace(tzinfo=UTC).astimezone(
+            timezone(timedelta(hours=8))
+        )
+        joined_time = escape_markdown(
+            joined_time_local.strftime("%Y-%m-%d %H:%M"), version=2
+        )
         message += f"加入时间: {joined_time}\n"
 
         if member.last_message_at:
             # 转换为东八区时间
-            last_msg_time_local = member.last_message_at.replace(tzinfo=UTC).astimezone(timezone(timedelta(hours=8)))
-            last_msg_time = escape_markdown(last_msg_time_local.strftime('%Y-%m-%d %H:%M'), version=2)
+            last_msg_time_local = member.last_message_at.replace(tzinfo=UTC).astimezone(
+                timezone(timedelta(hours=8))
+            )
+            last_msg_time = escape_markdown(
+                last_msg_time_local.strftime("%Y-%m-%d %H:%M"), version=2
+            )
             message += f"最后发言: {last_msg_time}\n"
         else:
             message += f"最后发言: 从未发言\n"
@@ -761,8 +830,12 @@ async def id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if ban:
             message += f"\n⚠️ 封禁状态\n"
             # 转换为东八区时间
-            ban_time_local = ban.banned_at.replace(tzinfo=UTC).astimezone(timezone(timedelta(hours=8)))
-            ban_time = escape_markdown(ban_time_local.strftime('%Y-%m-%d %H:%M'), version=2)
+            ban_time_local = ban.banned_at.replace(tzinfo=UTC).astimezone(
+                timezone(timedelta(hours=8))
+            )
+            ban_time = escape_markdown(
+                ban_time_local.strftime("%Y-%m-%d %H:%M"), version=2
+            )
             message += f"封禁时间: {ban_time}\n"
             if ban.ban_days:
                 message += f"封禁天数: {ban.ban_days}天\n"
@@ -775,7 +848,7 @@ async def id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text(message, parse_mode="MarkdownV2")
 
 
-@auto_delete_message(delay=30, custom_delays={'stats': 120, 'inactive': 240})
+@auto_delete_message(delay=30, custom_delays={"stats": 120, "inactive": 240})
 async def whitelist_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     /whitelist [用户ID/@用户名/回复消息]
@@ -786,7 +859,9 @@ async def whitelist_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return None
 
     with Session(engine) as session:
-        statement = select(GroupConfig).where(GroupConfig.group_id == update.effective_chat.id)
+        statement = select(GroupConfig).where(
+            GroupConfig.group_id == update.effective_chat.id
+        )
         group = session.exec(statement).first()
         if not group:
             return await update.message.reply_text("群组未初始化")
@@ -801,10 +876,14 @@ async def whitelist_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # 检查是否已在白名单
         if target_user_id in group.whitelist:
             if target_user_id < 0:
-                user_mention = f"@{target_username}" if target_username else target_full_name
+                user_mention = (
+                    f"@{target_username}" if target_username else target_full_name
+                )
             else:
                 user_mention = f"[{target_full_name}](tg://user?id={target_user_id})"
-            return await update.message.reply_text(f"{user_mention} 已经在白名单中", parse_mode="Markdown")
+            return await update.message.reply_text(
+                f"{user_mention} 已经在白名单中", parse_mode="Markdown"
+            )
 
         # 添加到白名单
         new_whitelist = group.whitelist.copy()
@@ -816,20 +895,22 @@ async def whitelist_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # 清除该群组的配置缓存
         from app.utils.channel_cache import group_config_cache
+
         group_config_cache.invalidate(update.effective_chat.id)
 
         if target_user_id < 0:
-            user_mention = f"@{target_username}" if target_username else target_full_name
+            user_mention = (
+                f"@{target_username}" if target_username else target_full_name
+            )
         else:
             user_mention = f"[{target_full_name}](tg://user?id={target_user_id})"
 
         return await update.message.reply_text(
-            f"✅ 已将 {user_mention} 添加到白名单",
-            parse_mode="Markdown"
+            f"✅ 已将 {user_mention} 添加到白名单", parse_mode="Markdown"
         )
 
 
-@auto_delete_message(delay=30, custom_delays={'stats': 120, 'inactive': 240})
+@auto_delete_message(delay=30, custom_delays={"stats": 120, "inactive": 240})
 async def unwhitelist_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     /unwhitelist [用户ID/@用户名/回复消息]
@@ -840,7 +921,9 @@ async def unwhitelist_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         return None
 
     with Session(engine) as session:
-        statement = select(GroupConfig).where(GroupConfig.group_id == update.effective_chat.id)
+        statement = select(GroupConfig).where(
+            GroupConfig.group_id == update.effective_chat.id
+        )
         group = session.exec(statement).first()
         if not group:
             return await update.message.reply_text("群组未初始化")
@@ -866,20 +949,22 @@ async def unwhitelist_command(update: Update, context: ContextTypes.DEFAULT_TYPE
 
         # 清除该群组的配置缓存
         from app.utils.channel_cache import group_config_cache
+
         group_config_cache.invalidate(update.effective_chat.id)
 
         if target_user_id < 0:
-            user_mention = f"@{target_username}" if target_username else target_full_name
+            user_mention = (
+                f"@{target_username}" if target_username else target_full_name
+            )
         else:
             user_mention = f"[{target_full_name}](tg://user?id={target_user_id})"
 
         return await update.message.reply_text(
-            f"✅ 已将 {user_mention} 从白名单移除",
-            parse_mode="Markdown"
+            f"✅ 已将 {user_mention} 从白名单移除", parse_mode="Markdown"
         )
 
 
-@auto_delete_message(delay=30, custom_delays={'stats': 120, 'inactive': 240})
+@auto_delete_message(delay=30, custom_delays={"stats": 120, "inactive": 240})
 async def whitelists_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     /whitelists
@@ -888,13 +973,16 @@ async def whitelists_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if not await is_admin(update):
         return None
     with Session(engine) as session:
-        statement = select(GroupConfig).where(GroupConfig.group_id == update.effective_chat.id)
+        statement = select(GroupConfig).where(
+            GroupConfig.group_id == update.effective_chat.id
+        )
         group = session.exec(statement).first()
 
         if not group:
             return await update.message.reply_text("群组未初始化")
 
         from app.config.settings import settings
+
         message = "📋 白名单列表\n\n"
 
         # 群组白名单
@@ -902,13 +990,16 @@ async def whitelists_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
             message += "🏠 本群白名单：\n"
             for uid in group.whitelist:
                 statement = select(GroupMember).where(
-                    GroupMember.group_id == group.id,
-                    GroupMember.user_id == uid
+                    GroupMember.group_id == group.id, GroupMember.user_id == uid
                 )
                 member = session.exec(statement).first()
                 if member:
                     if uid < 0:
-                        user_mention = f"@{member.username}" if member.username else member.full_name
+                        user_mention = (
+                            f"@{member.username}"
+                            if member.username
+                            else member.full_name
+                        )
                     else:
                         user_mention = f"[{member.full_name}](tg://user?id={uid})"
                     message += f"• {user_mention}\n"
@@ -920,7 +1011,7 @@ async def whitelists_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return await update.message.reply_text(message, parse_mode="Markdown")
 
 
-@auto_delete_message(delay=30, custom_delays={'stats': 120, 'inactive': 240})
+@auto_delete_message(delay=30, custom_delays={"stats": 120, "inactive": 240})
 async def removeadmin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     /removeadmin [用户ID/@用户名/回复消息]
@@ -928,7 +1019,9 @@ async def removeadmin_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     """
 
     with Session(engine) as session:
-        statement = select(GroupConfig).where(GroupConfig.group_id == update.effective_chat.id)
+        statement = select(GroupConfig).where(
+            GroupConfig.group_id == update.effective_chat.id
+        )
         group = session.exec(statement).first()
         if not group:
             return await update.message.reply_text("群组未初始化")
@@ -945,7 +1038,7 @@ async def removeadmin_command(update: Update, context: ContextTypes.DEFAULT_TYPE
             GroupAdmin.group_id == group.id,
             GroupAdmin.user_id == check_id,
             GroupAdmin.permission_level == 1,
-            GroupAdmin.is_active == True
+            GroupAdmin.is_active == True,
         )
         super_admin = session.exec(statement).first()
 
@@ -959,16 +1052,24 @@ async def removeadmin_command(update: Update, context: ContextTypes.DEFAULT_TYPE
 
         target_user_id, target_username, target_full_name = user_info
 
+        # 不能移除自己的管理员权限
+        if target_user_id == check_id:
+            return await update.message.reply_text("❌ 不能移除自己的管理员权限")
+
         # 检查是否是管理员
         statement = select(GroupAdmin).where(
             GroupAdmin.group_id == group.id,
             GroupAdmin.user_id == target_user_id,
-            GroupAdmin.is_active == True
+            GroupAdmin.is_active == True,
         )
         admin = session.exec(statement).first()
 
         if not admin:
             return await update.message.reply_text("该用户不是管理员")
+
+        # 不能移除超级管理员权限
+        if admin.permission_level == 1:
+            return await update.message.reply_text("❌ 不能移除超级管理员权限")
 
         # 移除管理员（软删除）
         admin.is_active = False
@@ -976,12 +1077,12 @@ async def removeadmin_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         session.commit()
 
         if target_user_id < 0:
-            user_mention = f"@{target_username}" if target_username else target_full_name
+            user_mention = (
+                f"@{target_username}" if target_username else target_full_name
+            )
         else:
             user_mention = f"[{target_full_name}](tg://user?id={target_user_id})"
 
         return await update.message.reply_text(
-            f"✅ 已移除 {user_mention} 的管理员权限",
-            parse_mode="Markdown"
+            f"✅ 已移除 {user_mention} 的管理员权限", parse_mode="Markdown"
         )
-

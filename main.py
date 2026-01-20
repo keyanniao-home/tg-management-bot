@@ -273,12 +273,12 @@ def main():
         )
     )
 
-    # 分类和标签管理回调
+    # 分类和标签管理回调（使用 catmgmt_ 和 tagmgmt_ 前缀避免与资源上传的 tag_ 回调冲突）
     application.add_handler(
-        CallbackQueryHandler(category_management_callback, pattern="^cat_")
+        CallbackQueryHandler(category_management_callback, pattern="^catmgmt_")
     )
     application.add_handler(
-        CallbackQueryHandler(tag_management_callback, pattern="^tag_")
+        CallbackQueryHandler(tag_management_callback, pattern="^tagmgmt_")
     )
     application.add_handler(
         CallbackQueryHandler(manage_resources_callback, pattern="^mgmt_res_")
