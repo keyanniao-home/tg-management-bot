@@ -345,9 +345,11 @@ async def description_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     points_earned = 5
     
     tags_text = " ".join([f"#{tag.name}" for tag in tags]) if tags else "无"
-    message_link = f"https://t.me/c/{str(update.effective_chat.id)[4:]}/{message_id}"
+    # Telegram 话题消息链接格式：/c/{group_id}/{topic_id}/{message_id}
     if message_thread_id:
-        message_link += f"/{message_thread_id}"
+        message_link = f"https://t.me/c/{str(update.effective_chat.id)[4:]}/{message_thread_id}/{message_id}"
+    else:
+        message_link = f"https://t.me/c/{str(update.effective_chat.id)[4:]}/{message_id}"
     
     # 转发文件（Bot重新发送）
     file_message = None
@@ -606,9 +608,11 @@ async def get_resource_command(update: Update, context: ContextTypes.DEFAULT_TYP
         except Exception as e:
             logger.debug(f"转发文件失败: {e}")
             
-            message_link = f"https://t.me/c/{str(update.effective_chat.id)[4:]}/{resource.message_id}"
+            # Telegram 话题消息链接格式：/c/{group_id}/{topic_id}/{message_id}
             if resource.message_thread_id:
-                message_link += f"?thread={resource.message_thread_id}"
+                message_link = f"https://t.me/c/{str(update.effective_chat.id)[4:]}/{resource.message_thread_id}/{resource.message_id}"
+            else:
+                message_link = f"https://t.me/c/{str(update.effective_chat.id)[4:]}/{resource.message_id}"
             
             category = session.get(Category, resource.category_id) if resource.category_id else None
             link_text = (
@@ -697,9 +701,11 @@ async def resources_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
             tags_statement = select(Tag).join(ResourceTag).where(ResourceTag.resource_id == resource.id)
             tags = list(session.exec(tags_statement).all())
             
-            file_link = f"https://t.me/c/{str(update.effective_chat.id)[4:]}/{resource.message_id}"
+            # Telegram 话题消息链接格式：/c/{group_id}/{topic_id}/{message_id}
             if resource.message_thread_id:
-                file_link += f"/{resource.message_thread_id}"
+                file_link = f"https://t.me/c/{str(update.effective_chat.id)[4:]}/{resource.message_thread_id}/{resource.message_id}"
+            else:
+                file_link = f"https://t.me/c/{str(update.effective_chat.id)[4:]}/{resource.message_id}"
             
             text = f"📦 <b>{resource.title}</b>\n\n"
             text += f"📂 分类: {category.name if category else '未分类'}\n"
@@ -776,7 +782,7 @@ async def resources_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
                             document=resource.file_id,
                             caption=caption,
                             parse_mode=ParseMode.HTML,
-                            message_thread_id=resource.message_thread_id
+                            message_thread_id=query.message.message_thread_id
                         )
                     elif resource.file_type == "photo":
                         await context.bot.send_photo(
@@ -784,7 +790,7 @@ async def resources_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
                             photo=resource.file_id,
                             caption=caption,
                             parse_mode=ParseMode.HTML,
-                            message_thread_id=resource.message_thread_id
+                            message_thread_id=query.message.message_thread_id
                         )
                     elif resource.file_type == "video":
                         await context.bot.send_video(
@@ -792,7 +798,7 @@ async def resources_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
                             video=resource.file_id,
                             caption=caption,
                             parse_mode=ParseMode.HTML,
-                            message_thread_id=resource.message_thread_id
+                            message_thread_id=query.message.message_thread_id
                         )
                     elif resource.file_type == "audio":
                         await context.bot.send_audio(
@@ -800,7 +806,7 @@ async def resources_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
                             audio=resource.file_id,
                             caption=caption,
                             parse_mode=ParseMode.HTML,
-                            message_thread_id=resource.message_thread_id
+                            message_thread_id=query.message.message_thread_id
                         )
                     else:
                         await context.bot.send_document(
@@ -808,7 +814,7 @@ async def resources_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
                             document=resource.file_id,
                             caption=caption,
                             parse_mode=ParseMode.HTML,
-                            message_thread_id=resource.message_thread_id
+                            message_thread_id=query.message.message_thread_id
                         )
                     
                     await query.answer("✅ 文件已发送", show_alert=True)
@@ -817,6 +823,57 @@ async def resources_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
             except Exception as e:
                 logger.error(f"Failed to send file: {e}")
                 await query.answer("❌ 发送失败", show_alert=True)
+    
+    # 处理删除资源
+    elif data.startswith("res_del_"):
+        resource_id = int(data.split("_")[2])
+        
+        with Session(engine) as session:
+            resource = session.get(Resource, resource_id)
+            
+            if not resource:
+                await query.answer("资源不存在", show_alert=True)
+                return
+            
+            # 检查权限
+            user_id = update.effective_user.id
+            can_delete = ResourceService.can_delete_resource(resource, user_id, False)
+            
+            if not can_delete:
+                await query.answer("❌ 无权限删除此资源", show_alert=True)
+                return
+            
+            # 确认删除
+            keyboard = [
+                [
+                    InlineKeyboardButton("✅ 确认删除", callback_data=f"res_del_confirm_{resource_id}"),
+                    InlineKeyboardButton("❌ 取消", callback_data=f"get_res_{resource_id}")
+                ]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(
+                f"⚠️ 确认删除资源吗？\n\n📁 {resource.title}\n\n删除后无法恢复！",
+                reply_markup=reply_markup
+            )
+    
+    # 确认删除资源
+    elif data.startswith("res_del_confirm_"):
+        resource_id = int(data.split("_")[3])
+        user_id = update.effective_user.id
+        
+        with Session(engine) as session:
+            success, message = ResourceService.delete_resource(
+                session=session,
+                resource_id=resource_id,
+                user_id=user_id,
+                is_admin=False
+            )
+            
+            if success:
+                await query.answer("✅ 资源已删除", show_alert=True)
+                await query.edit_message_text("✅ 资源已成功删除")
+            else:
+                await query.answer(f"❌ {message}", show_alert=True)
     
     elif data.startswith("res_page_"):
         page = int(data.split("_")[2])

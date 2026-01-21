@@ -103,10 +103,10 @@ class ResourceService:
         statement = select(Resource).where(Resource.group_id == group_id)
         count_statement = select(func.count(Resource.id)).where(Resource.group_id == group_id)
         
-        # 话题过滤
-        if message_thread_id is not None:
-            statement = statement.where(Resource.message_thread_id == message_thread_id)
-            count_statement = count_statement.where(Resource.message_thread_id == message_thread_id)
+        # 话题过滤 - 已移除，使资源全群共享
+        # if message_thread_id is not None:
+        #     statement = statement.where(Resource.message_thread_id == message_thread_id)
+        #     count_statement = count_statement.where(Resource.message_thread_id == message_thread_id)
         
         # 关键词搜索
         if keyword:
@@ -158,9 +158,9 @@ class ResourceService:
         if category_id:
             statement = statement.where(Resource.category_id == category_id)
         
-        # 话题筛选
-        if message_thread_id:
-            statement = statement.where(Resource.message_thread_id == message_thread_id)
+        # 话题筛选 - 已移除，使资源全群共享
+        # if message_thread_id:
+        #     statement = statement.where(Resource.message_thread_id == message_thread_id)
         
         # 标签筛选
         if tag_ids:
