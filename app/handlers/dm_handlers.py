@@ -3,7 +3,7 @@
 支持成员间通过Bot转发私信，并提供阅读回执功能
 """
 
-from datetime import datetime
+from datetime import datetime, UTC, timedelta, timezone
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CallbackQueryHandler
 from telegram.constants import ParseMode
@@ -145,9 +145,7 @@ async def dm_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             session.commit()
 
             # 在群组中通知
-            # 使用已解析的用户信息显示
             display_name = f"@{target_username}" if target_username else (f"{target_full_name}" if target_full_name else f"用户 {target_user_id}")
-            
             notification_text = (
                 f"✅ 私信已发送给 {display_name}\n等待对方确认阅读..."
             )
@@ -157,6 +155,7 @@ async def dm_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
 
             # 同时在主群艾特接收者
+            display_name = f"@{target_username}" if target_username else (f"{target_full_name}" if target_full_name else f"用户 {target_user_id}")
             mention_text = (
                 f"💬 {display_name} "
                 f"你有一条来自 {update.effective_user.mention_html()} 的私信，请查看Bot私聊"
@@ -225,20 +224,24 @@ async def dm_read_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         session.commit()
 
         # 更新原消息显示已读
+        # 转换为北京时间 (UTC+8)
+        read_at_local = dm_relay.read_at.replace(tzinfo=UTC).astimezone(timezone(timedelta(hours=8)))
         await query.edit_message_text(
             f"{query.message.text_html}\n\n"
-            f"✅ <b>已于 {dm_relay.read_at.strftime('%Y-%m-%d %H:%M')} 标记为已读</b>",
+            f"✅ <b>已于 {read_at_local.strftime('%Y-%m-%d %H:%M')} 标记为已读</b>",
             parse_mode=ParseMode.HTML,
         )
 
         # 尝试通知发送者
         try:
             to_display = f"@{dm_relay.to_username}" if dm_relay.to_username else f"用户 {dm_relay.to_user_id}"
+            # 转换为北京时间 (UTC+8)
+            read_at_local = dm_relay.read_at.replace(tzinfo=UTC).astimezone(timezone(timedelta(hours=8)))
             await context.bot.send_message(
                 chat_id=dm_relay.from_user_id,
                 text=(
                     f"✅ 你发送给 {to_display} 的私信已被阅读\n"
-                    f"已读时间: {dm_relay.read_at.strftime('%Y-%m-%d %H:%M:%S')}"
+                    f"已读时间: {read_at_local.strftime('%Y-%m-%d %H:%M:%S')}"
                 ),
             )
         except:
@@ -248,13 +251,15 @@ async def dm_read_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             if dm_relay.notification_message_id:
                 to_display = f"@{dm_relay.to_username}" if dm_relay.to_username else f"用户 {dm_relay.to_user_id}"
+                # 转换为北京时间 (UTC+8)
+                read_at_local = dm_relay.read_at.replace(tzinfo=UTC).astimezone(timezone(timedelta(hours=8)))
                 await context.bot.edit_message_text(
                     chat_id=dm_relay.group_id,
                     message_id=dm_relay.notification_message_id,
                     text=(
                         f"✅ 私信已送达并已读\n"
                         f"接收者: {to_display}\n"
-                        f"已读时间: {dm_relay.read_at.strftime('%Y-%m-%d %H:%M')}"
+                        f"已读时间: {read_at_local.strftime('%Y-%m-%d %H:%M')}"
                     ),
                 )
         except:
@@ -296,16 +301,14 @@ async def my_dms_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     if dm.read
                     else ("📨已送达" if dm.delivered else "❌未送达")
                 )
-                to_display = f"@{dm.to_username}" if dm.to_username else f"用户 {dm.to_user_id}"
-                text += f"→ {to_display}: {dm.message[:30]}... [{status}]\n"
+                text += f"→ 用户 {dm.to_user_id}: {dm.message[:30]}... [{status}]\n"
             text += "\n"
 
         if received_dms:
             text += "<b>📥 已接收:</b>\n"
             for dm in received_dms:
                 status = "✅已读" if dm.read else "📬未读"
-                from_display = f"@{dm.from_username}" if dm.from_username else f"用户 {dm.from_user_id}"
-                text += f"← {from_display}: {dm.message[:30]}... [{status}]\n"
+                text += f"← 用户 {dm.from_user_id}: {dm.message[:30]}... [{status}]\n"
 
         if not sent_dms and not received_dms:
             text += "暂无私信记录"

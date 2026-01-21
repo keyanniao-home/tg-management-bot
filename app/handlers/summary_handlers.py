@@ -2,7 +2,7 @@
 消息总结命令处理器
 """
 
-from datetime import datetime, timedelta, UTC
+from datetime import datetime, timedelta, UTC, timezone
 from typing import Optional
 from telegram import Update
 from telegram.ext import ContextTypes
@@ -104,18 +104,23 @@ async def summary_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         messages_for_llm = []
         for msg, member in results:
             if msg.text:
+                # 转换为北京时间 (UTC+8)
+                msg_time_local = msg.created_at.replace(tzinfo=UTC).astimezone(timezone(timedelta(hours=8)))
                 messages_for_llm.append(
                     {
                         "sender": member.full_name or member.username or "未知",
                         "text": msg.text[:500],  # 限制长度
-                        "time": msg.created_at.strftime("%H:%M"),
+                        "time": msg_time_local.strftime("%H:%M"),
                     }
                 )
 
         # 生成总结
+        # 转换为北京时间 (UTC+8)
+        start_time_local = start_time.replace(tzinfo=UTC).astimezone(timezone(timedelta(hours=8)))
+        end_time_local = end_time.replace(tzinfo=UTC).astimezone(timezone(timedelta(hours=8)))
         result = await llm_service.summarize_messages(
             messages_for_llm,
-            context=f"时间范围: {start_time.strftime('%Y-%m-%d %H:%M')} 到 {end_time.strftime('%Y-%m-%d %H:%M')}",
+            context=f"时间范围: {start_time_local.strftime('%Y-%m-%d %H:%M')} 到 {end_time_local.strftime('%Y-%m-%d %H:%M')}",
         )
 
         if not result:
@@ -140,7 +145,7 @@ async def summary_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # 发送总结
         summary_text = f"📊 消息总结\n\n"
-        summary_text += f"⏰ 时间范围: {start_time.strftime('%m-%d %H:%M')} - {end_time.strftime('%m-%d %H:%M')}\n"
+        summary_text += f"⏰ 时间范围: {start_time_local.strftime('%m-%d %H:%M')} - {end_time_local.strftime('%m-%d %H:%M')}\n"
         summary_text += f"📝 消息数: {len(messages_for_llm)}\n"
         summary_text += (
             f"👥 参与者: {len(set(m['sender'] for m in messages_for_llm))} 人\n\n"
@@ -253,7 +258,9 @@ async def search_user_messages_command(
         result_text = f"📝 用户 {target_user_id} 最近{hours}小时的消息 (最多50条):\n\n"
 
         for msg in messages[:20]:  # 限制显示数量
-            time_str = msg.created_at.strftime("%m-%d %H:%M")
+            # 转换为北京时间 (UTC+8)
+            time_local = msg.created_at.replace(tzinfo=UTC).astimezone(timezone(timedelta(hours=8)))
+            time_str = time_local.strftime("%m-%d %H:%M")
             text_preview = msg.text[:100] if msg.text else ""
             result_text += f"[{time_str}] {text_preview}\n\n"
 
@@ -326,15 +333,20 @@ async def search_messages_command(update: Update, context: ContextTypes.DEFAULT_
         participants = set(member.user_id for _, member in results)
 
         # 构建消息
+        # 转换为北京时间 (UTC+8)
+        start_time_local = start_time.replace(tzinfo=UTC).astimezone(timezone(timedelta(hours=8)))
+        end_time_local = end_time.replace(tzinfo=UTC).astimezone(timezone(timedelta(hours=8)))
         text = f"📊 最近{hours}小时消息统计\n\n"
-        text += f"⏰ 时间范围: {start_time.strftime('%m-%d %H:%M')} - {end_time.strftime('%m-%d %H:%M')}\n"
+        text += f"⏰ 时间范围: {start_time_local.strftime('%m-%d %H:%M')} - {end_time_local.strftime('%m-%d %H:%M')}\n"
         text += f"📝 总消息数: {total_messages}\n"
         text += f"👥 参与人数: {len(participants)}\n\n"
         text += "━━━━━━━━━━━━━━━\n"
         text += "最近消息:\n\n"
 
         for msg, member in results[:20]:
-            time_str = msg.created_at.strftime("%m-%d %H:%M")
+            # 转换为北京时间 (UTC+8)
+            time_local = msg.created_at.replace(tzinfo=UTC).astimezone(timezone(timedelta(hours=8)))
+            time_str = time_local.strftime("%m-%d %H:%M")
             sender = member.full_name or member.username or "未知"
             text_preview = msg.text[:50] if msg.text else ""
             if len(msg.text or "") > 50:

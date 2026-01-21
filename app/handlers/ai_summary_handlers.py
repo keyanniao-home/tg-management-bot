@@ -7,7 +7,7 @@ AI总结可视化面板
 - 一键执行总结
 """
 
-from datetime import datetime, timedelta, UTC
+from datetime import datetime, timedelta, UTC, timezone
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
@@ -229,11 +229,13 @@ async def execute_ai_summary(query, state, group_id):
         # 格式化消息
         formatted_messages = []
         for msg, member in results:
+            # 转换为北京时间 (UTC+8)
+            msg_time_local = msg.created_at.replace(tzinfo=UTC).astimezone(timezone(timedelta(hours=8)))
             formatted_messages.append(
                 {
                     "sender": member.full_name or member.username or "未知用户",
                     "text": msg.text or "",
-                    "time": msg.created_at.strftime("%H:%M"),
+                    "time": msg_time_local.strftime("%H:%M"),
                 }
             )
 
@@ -260,9 +262,13 @@ async def execute_ai_summary(query, state, group_id):
         total_messages = len(results)
         participants = len(set(member.user_id for _, member in results))
 
+        # 转换为北京时间 (UTC+8)
+        start_time_local = start_time.replace(tzinfo=UTC).astimezone(timezone(timedelta(hours=8)))
+        end_time_local = end_time.replace(tzinfo=UTC).astimezone(timezone(timedelta(hours=8)))
+
         summary_text = f"""🤖 AI消息总结
 
-⏰ 时间范围: {start_time.strftime("%m-%d %H:%M")} - {end_time.strftime("%m-%d %H:%M")}
+⏰ 时间范围: {start_time_local.strftime("%m-%d %H:%M")} - {end_time_local.strftime("%m-%d %H:%M")}
 📝 消息数量: {total_messages}
 👥 参与人数: {participants}
 

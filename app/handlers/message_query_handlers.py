@@ -7,7 +7,7 @@
 - 结果格式选择（简要/详细）
 """
 
-from datetime import datetime, timedelta, UTC
+from datetime import datetime, timedelta, UTC, timezone
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
@@ -246,9 +246,12 @@ async def execute_message_query(query, state, group_id):
 
         if fmt == "summary":
             # 简要统计
+            # 转换为北京时间 (UTC+8)
+            start_time_local = start_time.replace(tzinfo=UTC).astimezone(timezone(timedelta(hours=8)))
+            end_time_local = end_time.replace(tzinfo=UTC).astimezone(timezone(timedelta(hours=8)))
             text = f"""📊 查询结果（最近{hours}小时）
 
-⏰ 时间范围: {start_time.strftime("%m-%d %H:%M")} - {end_time.strftime("%m-%d %H:%M")}
+⏰ 时间范围: {start_time_local.strftime("%m-%d %H:%M")} - {end_time_local.strftime("%m-%d %H:%M")}
 📝 总消息数: {total_messages}
 👥 参与人数: {len(participants)}
 
@@ -256,9 +259,12 @@ async def execute_message_query(query, state, group_id):
 
         else:
             # 详细内容
+            # 转换为北京时间 (UTC+8)
+            start_time_local = start_time.replace(tzinfo=UTC).astimezone(timezone(timedelta(hours=8)))
+            end_time_local = end_time.replace(tzinfo=UTC).astimezone(timezone(timedelta(hours=8)))
             text = f"""📄 查询结果（最近{hours}小时）
 
-⏰ {start_time.strftime("%m-%d %H:%M")} - {end_time.strftime("%m-%d %H:%M")}
+⏰ {start_time_local.strftime("%m-%d %H:%M")} - {end_time_local.strftime("%m-%d %H:%M")}
 📝 总计 {total_messages} 条消息
 
 ━━━━━━━━━━━━━━━
@@ -266,7 +272,9 @@ async def execute_message_query(query, state, group_id):
 
             # 显示最近20条
             for msg, member in results[:20]:
-                time_str = msg.created_at.strftime("%m-%d %H:%M")
+                # 转换为北京时间 (UTC+8)
+                time_local = msg.created_at.replace(tzinfo=UTC).astimezone(timezone(timedelta(hours=8)))
+                time_str = time_local.strftime("%m-%d %H:%M")
                 sender = member.full_name or member.username or "未知"
                 text_preview = msg.text[:50] if msg.text else ""
                 if len(msg.text or "") > 50:
