@@ -33,6 +33,13 @@ ALTER TABLE resource_tags
 ALTER TABLE resource_edits 
     ALTER COLUMN editor_id TYPE BIGINT;
 
+-- 添加 deleted_at 字段到 resources 表（软删除功能）
+ALTER TABLE resources 
+ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE DEFAULT NULL;
+
+-- 创建索引以优化软删除查询
+CREATE INDEX IF NOT EXISTS idx_resources_deleted_at ON resources(deleted_at) WHERE deleted_at IS NOT NULL;
+
 -- ============================================================
 -- 说明
 -- ============================================================

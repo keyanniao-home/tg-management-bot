@@ -3,6 +3,7 @@
 """
 from datetime import datetime, UTC
 import re
+import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler, CommandHandler, CallbackQueryHandler, MessageHandler, filters
 from telegram.constants import ParseMode
@@ -17,6 +18,23 @@ from app.utils.auto_delete import auto_delete_message
 
 SELECTING_CATEGORY, SELECTING_TAGS, ENTERING_DESCRIPTION, CREATING_CATEGORY, CREATING_TAG = range(5)
 TEMP_RESOURCE_DATA = "temp_resource_data"
+
+
+async def delete_messages_after_delay(
+    context: ContextTypes.DEFAULT_TYPE,
+    chat_id: int,
+    message_ids: list[int],
+    delay_seconds: int = 30
+):
+    """延迟删除消息列表"""
+    await asyncio.sleep(delay_seconds)
+    
+    for msg_id in message_ids:
+        try:
+            await context.bot.delete_message(chat_id, msg_id)
+            logger.debug(f"已删除消息 {msg_id}")
+        except Exception as e:
+            logger.debug(f"无法删除消息 {msg_id}: {e}")
 
 
 async def upload_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -77,7 +95,8 @@ async def upload_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "file_name": file_name,
         "file_size": file_size,
         "file_type": file_type,
-        "selected_tags": []
+        "selected_tags": [],
+        "messages_to_delete": [update.message.message_id]  # 保存 /upload 命令消息ID
     }
     
     with Session(engine) as session:
@@ -95,7 +114,10 @@ async def upload_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard.append([InlineKeyboardButton("➕ 新建分类", callback_data="cat_new")])
         
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text(f"📁 文件: {file_name}\n\n请选择分类：", reply_markup=reply_markup)
+        category_msg = await update.message.reply_text(f"📁 文件: {file_name}\n\n请选择分类：", reply_markup=reply_markup)
+        
+        # 保存分类选择消息ID
+        context.user_data[TEMP_RESOURCE_DATA]["messages_to_delete"].append(category_msg.message_id)
     
     return SELECTING_CATEGORY
 
@@ -203,13 +225,19 @@ async def create_category_input(update: Update, context: ContextTypes.DEFAULT_TY
         # 自动选择新建的分类
         context.user_data[TEMP_RESOURCE_DATA]["category_id"] = category.id
         
-        await update.message.reply_text(f"✅ 已创建并选择分类: {category_name}")
+        # 保存新建分类的消息ID
+        data = context.user_data.get(TEMP_RESOURCE_DATA, {})
+        data["messages_to_delete"].append(update.message.message_id)  # 用户输入
+        
+        confirm_msg = await update.message.reply_text(f"✅ 已创建并选择分类: {category_name}")
+        data["messages_to_delete"].append(confirm_msg.message_id)
         
         # 继续到标签选择
         tags = TagService.get_tags(session, update.effective_chat.id)
         
         if not tags:
-            await update.message.reply_text("请输入资源描述（或发送 /cancel 取消）：")
+            desc_msg = await update.message.reply_text("请输入资源描述（或发送 /cancel 取消）：")
+            data["messages_to_delete"].append(desc_msg.message_id)
             return ENTERING_DESCRIPTION
         
         keyboard = []
@@ -245,12 +273,17 @@ async def create_tag_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(f"❌ 标签 '#{tag_name}' 已存在，请重新输入：")
             return CREATING_TAG
         
-        # 自动选择新建的标签
-        selected_tags = context.user_data[TEMP_RESOURCE_DATA].get("selected_tags", [])
-        selected_tags.append(tag.id)
-        context.user_data[TEMP_RESOURCE_DATA]["selected_tags"] = selected_tags
+        # 保存新建标签的消息ID
+        data = context.user_data.get(TEMP_RESOURCE_DATA, {})
+        data["messages_to_delete"].append(update.message.message_id)  # 用户输入
         
-        await update.message.reply_text(f"✅ 已创建并选择标签: #{tag_name}")
+        # 自动选择新建的标签
+        selected_tags = data.get("selected_tags", [])
+        selected_tags.append(tag.id)
+        data["selected_tags"] = selected_tags
+        
+        confirm_msg = await update.message.reply_text(f"✅ 已创建并选择标签: #{tag_name}")
+        data["messages_to_delete"].append(confirm_msg.message_id)
         
         # 显示更新后的标签列表
         tags = TagService.get_tags(session, update.effective_chat.id)
@@ -272,7 +305,8 @@ async def create_tag_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ])
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await update.message.reply_text(f"🏷️ 已选择 {len(selected_tags)} 个标签\n请继续选择或点击完成：", reply_markup=reply_markup)
+        tag_msg = await update.message.reply_text(f"🏷️ 已选择 {len(selected_tags)} 个标签\n请继续选择或点击完成：", reply_markup=reply_markup)
+        data["messages_to_delete"].append(tag_msg.message_id)
     
     return SELECTING_TAGS
 
@@ -285,6 +319,9 @@ async def description_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not data:
         await update.message.reply_text("上传会话已过期，请重新开始")
         return ConversationHandler.END
+    
+    # 保存用户输入的描述消息ID
+    data["messages_to_delete"].append(update.message.message_id)
     
     with Session(engine) as session:
         # 创建资源
@@ -431,6 +468,19 @@ async def description_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         
         await update.message.reply_text(notification, parse_mode=ParseMode.HTML, message_thread_id=message_thread_id)
+    
+    # 删除上传流程中的中间消息（30秒后）
+    message_ids_to_delete = data.get("messages_to_delete", [])
+    if message_ids_to_delete:
+        asyncio.create_task(
+            delete_messages_after_delay(
+                context=context,
+                chat_id=update.effective_chat.id,
+                message_ids=message_ids_to_delete,
+                delay_seconds=30
+            )
+        )
+        logger.info(f"已安排删除 {len(message_ids_to_delete)} 条上传流程消息")
     
     del context.user_data[TEMP_RESOURCE_DATA]
     
@@ -628,6 +678,7 @@ async def get_resource_command(update: Update, context: ContextTypes.DEFAULT_TYP
             await update.message.reply_text(link_text, parse_mode=ParseMode.HTML)
 
 
+@auto_delete_message(delay=30)
 async def resources_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
         return
@@ -675,7 +726,7 @@ async def resources_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ])
         
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
+        return await update.message.reply_text(text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
 
 
 async def resources_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -824,6 +875,25 @@ async def resources_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 logger.error(f"Failed to send file: {e}")
                 await query.answer("❌ 发送失败", show_alert=True)
     
+    # 确认删除资源（必须在 res_del_ 之前检查！）
+    elif data.startswith("res_del_confirm_"):
+        resource_id = int(data.split("_")[3])
+        user_id = update.effective_user.id
+        
+        with Session(engine) as session:
+            success, message = ResourceService.delete_resource(
+                session=session,
+                resource_id=resource_id,
+                user_id=user_id,
+                is_admin=False
+            )
+            
+            if success:
+                await query.answer("✅ 资源已删除", show_alert=True)
+                await query.edit_message_text("✅ 资源已成功删除")
+            else:
+                await query.answer(f"❌ {message}", show_alert=True)
+    
     # 处理删除资源
     elif data.startswith("res_del_"):
         resource_id = int(data.split("_")[2])
@@ -855,25 +925,6 @@ async def resources_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 f"⚠️ 确认删除资源吗？\n\n📁 {resource.title}\n\n删除后无法恢复！",
                 reply_markup=reply_markup
             )
-    
-    # 确认删除资源
-    elif data.startswith("res_del_confirm_"):
-        resource_id = int(data.split("_")[3])
-        user_id = update.effective_user.id
-        
-        with Session(engine) as session:
-            success, message = ResourceService.delete_resource(
-                session=session,
-                resource_id=resource_id,
-                user_id=user_id,
-                is_admin=False
-            )
-            
-            if success:
-                await query.answer("✅ 资源已删除", show_alert=True)
-                await query.edit_message_text("✅ 资源已成功删除")
-            else:
-                await query.answer(f"❌ {message}", show_alert=True)
     
     elif data.startswith("res_page_"):
         page = int(data.split("_")[2])

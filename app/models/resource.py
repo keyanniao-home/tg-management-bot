@@ -40,6 +40,7 @@ class Resource(SQLModel, table=True):
     # 时间戳
     created_at: datetime = Field(default_factory=datetime.utcnow, description="创建时间")
     updated_at: datetime = Field(default_factory=datetime.utcnow, description="更新时间")
+    deleted_at: Optional[datetime] = Field(default=None, description="软删除时间戳")
 
 
 class ResourceTag(SQLModel, table=True):

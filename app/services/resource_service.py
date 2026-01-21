@@ -103,6 +103,10 @@ class ResourceService:
         statement = select(Resource).where(Resource.group_id == group_id)
         count_statement = select(func.count(Resource.id)).where(Resource.group_id == group_id)
         
+        # 过滤已删除的资源
+        statement = statement.where(Resource.deleted_at.is_(None))
+        count_statement = count_statement.where(Resource.deleted_at.is_(None))
+        
         # 话题过滤 - 已移除，使资源全群共享
         # if message_thread_id is not None:
         #     statement = statement.where(Resource.message_thread_id == message_thread_id)
@@ -154,6 +158,9 @@ class ResourceService:
         # 构建基础查询
         statement = select(Resource).where(Resource.group_id == group_id)
         
+        # 过滤已删除的资源
+        statement = statement.where(Resource.deleted_at.is_(None))
+        
         # 分类筛选
         if category_id:
             statement = statement.where(Resource.category_id == category_id)
@@ -200,8 +207,6 @@ class ResourceService:
         Returns:
             (成功标志, 消息)
         """
-        from datetime import datetime, UTC
-        
         resource = session.get(Resource, resource_id)
         
         if not resource:
@@ -211,12 +216,11 @@ class ResourceService:
         if not ResourceService.can_delete_resource(resource, user_id, is_admin):
             return False, "无权限删除此资源"
         
-        # 软删除
-        resource.deleted_at = datetime.now(UTC)
-        session.add(resource)
+        # 硬删除 - 真正从数据库删除
+        session.delete(resource)
         session.commit()
         
-        logger.info(f"Resource {resource_id} deleted by user {user_id}")
+        logger.info(f"Resource {resource_id} permanently deleted by user {user_id}")
         return True, "资源已删除"
     
     @staticmethod
