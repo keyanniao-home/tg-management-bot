@@ -655,6 +655,121 @@ class Migration005_AddCrawlTaskStatusFields(Migration):
         logger.info("✅ 回滚完成")
 
 
+
+class Migration006_FixDMRelayBigInt(Migration):
+    """
+    迁移006: 修复 DM 转达表的整型溢出问题
+    
+    变更内容:
+    - 将 dm_relays 表的 group_id, from_user_id, to_user_id 从 INTEGER 转换为 BIGINT
+    - 将 dm_read_receipts 表的 read_by 从 INTEGER 转换为 BIGINT
+    - 用于支持更大的 Telegram ID 值
+    """
+    
+    def __init__(self):
+        super().__init__(
+            version=6,
+            description="Fix DM relay tables to use BIGINT for Telegram IDs"
+        )
+    
+    def check(self, session: Session) -> bool:
+        """检查 dm_relays 表的 ID 字段是否需要转换为 BIGINT"""
+        try:
+            inspector = inspect(engine)
+            
+            # 检查表是否存在
+            if 'dm_relays' not in inspector.get_table_names():
+                logger.info("dm_relays 表不存在，跳过迁移")
+                return False
+            
+            # 检查字段类型
+            columns = inspector.get_columns('dm_relays')
+            
+            # 检查是否有字段需要转换（INTEGER -> BIGINT）
+            needs_migration = False
+            for col in columns:
+                if col['name'] in ['group_id', 'from_user_id', 'to_user_id']:
+                    # 检查类型名称，可能是 'INTEGER' 或 'INT'
+                    col_type = str(col['type']).upper()
+                    if 'BIGINT' not in col_type and ('INTEGER' in col_type or col_type == 'INT'):
+                        logger.warning(f"检测到 {col['name']} 字段类型为 {col_type}，需要转换为 BIGINT")
+                        needs_migration = True
+            
+            if needs_migration:
+                logger.warning("检测到需要修复 DM 转达表的整型溢出问题")
+                return True
+            else:
+                logger.info("dm_relays 表已使用 BIGINT 类型")
+                return False
+                
+        except Exception as e:
+            logger.error(f"检查迁移状态失败: {e}")
+            return False
+    
+    def execute(self, session: Session):
+        """执行迁移"""
+        logger.info("=" * 80)
+        logger.info(f"开始执行迁移 #{self.version}: {self.description}")
+        logger.info("=" * 80)
+        
+        try:
+            # 1. 修复 dm_relays 表
+            logger.info("Step 1/2: 转换 dm_relays 表的 ID 字段为 BIGINT...")
+            session.exec(text("""
+                ALTER TABLE dm_relays 
+                    ALTER COLUMN group_id TYPE BIGINT,
+                    ALTER COLUMN from_user_id TYPE BIGINT,
+                    ALTER COLUMN to_user_id TYPE BIGINT;
+            """))
+            session.commit()
+            logger.info("✅ dm_relays 表字段已转换")
+            
+            # 2. 修复 dm_read_receipts 表（如果存在）
+            inspector = inspect(engine)
+            if 'dm_read_receipts' in inspector.get_table_names():
+                logger.info("Step 2/2: 转换 dm_read_receipts 表的 ID 字段为 BIGINT...")
+                session.exec(text("""
+                    ALTER TABLE dm_read_receipts 
+                        ALTER COLUMN read_by TYPE BIGINT;
+                """))
+                session.commit()
+                logger.info("✅ dm_read_receipts 表字段已转换")
+            else:
+                logger.info("Step 2/2: dm_read_receipts 表不存在，跳过")
+            
+            # 验证
+            logger.info("验证迁移结果...")
+            inspector = inspect(engine)
+            columns = inspector.get_columns('dm_relays')
+            
+            for col in columns:
+                if col['name'] in ['group_id', 'from_user_id', 'to_user_id']:
+                    col_type = str(col['type']).upper()
+                    if 'BIGINT' not in col_type:
+                        raise Exception(f"验证失败: {col['name']} 字段类型仍为 {col_type}")
+            
+            logger.info("✅ 验证通过，所有字段已转换为 BIGINT")
+            logger.info("=" * 80)
+            logger.success(f"🎉 迁移 #{self.version} 执行成功！")
+            logger.info("=" * 80)
+            
+        except Exception as e:
+            logger.error(f"❌ 迁移失败: {e}")
+            session.rollback()
+            logger.error("⚠️ 事务已回滚")
+            raise
+    
+    def rollback(self, session: Session):
+        """回滚迁移（不建议，因为可能导致数据溢出）"""
+        logger.warning("⚠️ 回滚此迁移可能导致整型溢出问题重新出现")
+        logger.warning("如果确实需要回滚，请手动执行以下 SQL：")
+        logger.warning("   ALTER TABLE dm_relays ALTER COLUMN group_id TYPE INTEGER;")
+        logger.warning("   ALTER TABLE dm_relays ALTER COLUMN from_user_id TYPE INTEGER;")
+        logger.warning("   ALTER TABLE dm_relays ALTER COLUMN to_user_id TYPE INTEGER;")
+        logger.warning("   ALTER TABLE dm_read_receipts ALTER COLUMN read_by TYPE INTEGER;")
+        raise NotImplementedError("不建议回滚此迁移")
+
+
 # 注册所有迁移
 ALL_MIGRATIONS = [
     Migration001_RemoveChannelBindingGroupId(),
@@ -662,6 +777,7 @@ ALL_MIGRATIONS = [
     Migration003_AddUserProfileTables(),
     Migration004_AddScammerDetectionRecords(),
     Migration005_AddCrawlTaskStatusFields(),
+    Migration006_FixDMRelayBigInt(),
 ]
 
 
