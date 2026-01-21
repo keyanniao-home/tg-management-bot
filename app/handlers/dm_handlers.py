@@ -145,8 +145,11 @@ async def dm_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             session.commit()
 
             # 在群组中通知
+            # 使用已解析的用户信息显示
+            display_name = f"@{target_username}" if target_username else (f"{target_full_name}" if target_full_name else f"用户 {target_user_id}")
+            
             notification_text = (
-                f"✅ 私信已发送给用户 {target_user_id}\n等待对方确认阅读..."
+                f"✅ 私信已发送给 {display_name}\n等待对方确认阅读..."
             )
 
             notification_msg = await update.message.reply_text(
@@ -155,7 +158,7 @@ async def dm_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             # 同时在主群艾特接收者
             mention_text = (
-                f"💬 用户 {target_user_id} "
+                f"💬 {display_name} "
                 f"你有一条来自 {update.effective_user.mention_html()} 的私信，请查看Bot私聊"
             )
             await update.effective_chat.send_message(
@@ -172,8 +175,9 @@ async def dm_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         except Forbidden:
             # 用户未启动Bot
+            display_name = f"@{target_username}" if target_username else (f"{target_full_name}" if target_full_name else f"用户 {target_user_id}")
             await update.message.reply_text(
-                f"❌ 无法发送私信给用户 {target_user_id}\n"
+                f"❌ 无法发送私信给 {display_name}\n"
                 f"原因: 对方未启动Bot或已屏蔽Bot\n"
                 f"请提醒对方先私聊Bot发送 /start"
             )
@@ -229,10 +233,11 @@ async def dm_read_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # 尝试通知发送者
         try:
+            to_display = f"@{dm_relay.to_username}" if dm_relay.to_username else f"用户 {dm_relay.to_user_id}"
             await context.bot.send_message(
                 chat_id=dm_relay.from_user_id,
                 text=(
-                    f"✅ 你发送给用户 {dm_relay.to_user_id} 的私信已被阅读\n"
+                    f"✅ 你发送给 {to_display} 的私信已被阅读\n"
                     f"已读时间: {dm_relay.read_at.strftime('%Y-%m-%d %H:%M:%S')}"
                 ),
             )
@@ -242,12 +247,13 @@ async def dm_read_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # 在群组更新通知消息
         try:
             if dm_relay.notification_message_id:
+                to_display = f"@{dm_relay.to_username}" if dm_relay.to_username else f"用户 {dm_relay.to_user_id}"
                 await context.bot.edit_message_text(
                     chat_id=dm_relay.group_id,
                     message_id=dm_relay.notification_message_id,
                     text=(
                         f"✅ 私信已送达并已读\n"
-                        f"接收者: 用户 {dm_relay.to_user_id}\n"
+                        f"接收者: {to_display}\n"
                         f"已读时间: {dm_relay.read_at.strftime('%Y-%m-%d %H:%M')}"
                     ),
                 )
@@ -290,14 +296,16 @@ async def my_dms_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     if dm.read
                     else ("📨已送达" if dm.delivered else "❌未送达")
                 )
-                text += f"→ 用户 {dm.to_user_id}: {dm.message[:30]}... [{status}]\n"
+                to_display = f"@{dm.to_username}" if dm.to_username else f"用户 {dm.to_user_id}"
+                text += f"→ {to_display}: {dm.message[:30]}... [{status}]\n"
             text += "\n"
 
         if received_dms:
             text += "<b>📥 已接收:</b>\n"
             for dm in received_dms:
                 status = "✅已读" if dm.read else "📬未读"
-                text += f"← 用户 {dm.from_user_id}: {dm.message[:30]}... [{status}]\n"
+                from_display = f"@{dm.from_username}" if dm.from_username else f"用户 {dm.from_user_id}"
+                text += f"← {from_display}: {dm.message[:30]}... [{status}]\n"
 
         if not sent_dms and not received_dms:
             text += "暂无私信记录"

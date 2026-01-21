@@ -9,16 +9,17 @@ from app.database.connection import engine
 from app.models import GroupConfig, GroupMember, UserPoints
 from app.services.points_service import points_service
 from app.handlers.commands import is_admin
+from app.utils.auto_delete import auto_delete_message
 
 
+@auto_delete_message(delay=30)
 async def checkin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """签到命令: /kobe_checkin"""
+    """签到命令: /checkin"""
     if not update.effective_user or not update.effective_chat:
         return
     
     if not points_service.is_enabled():
-        await update.message.reply_text("❌ 积分系统未启用")
-        return
+        return await update.message.reply_text("❌ 积分系统未启用")
     
     with Session(engine) as session:
         # 检查群组是否初始化
@@ -27,8 +28,7 @@ async def checkin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         group = session.exec(statement).first()
         
         if not group or not group.is_initialized:
-            await update.message.reply_text("❌ 群组未初始化，请先使用 /kobe_init 命令")
-            return
+            return await update.message.reply_text("❌ 群组未初始化，请先使用 /init 命令")
         
         user = update.effective_user
         success, message, points = points_service.check_in(
@@ -40,19 +40,19 @@ async def checkin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         
         if success:
-            await update.message.reply_text(f"✅ {message}")
+            return await update.message.reply_text(f"✅ {message}")
         else:
-            await update.message.reply_text(f"ℹ️ {message}")
+            return await update.message.reply_text(f"ℹ️ {message}")
 
 
+@auto_delete_message(delay=30)
 async def points_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """查看积分: /kobe_points [@用户]"""
+    """查看积分: /points [@用户]"""
     if not update.effective_chat:
         return
     
     if not points_service.is_enabled():
-        await update.message.reply_text("❌ 积分系统未启用")
-        return
+        return await update.message.reply_text("❌ 积分系统未启用")
     
     # 如果有参数且是管理员，可以查看其他人的积分
     target_user_id = update.effective_user.id if update.effective_user else None
@@ -63,17 +63,14 @@ async def points_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             if arg.startswith('@'):
                 # TODO: 通过username查找user_id
-                await update.message.reply_text("暂不支持通过@用户名查询，请使用用户ID")
-                return
+                return await update.message.reply_text("暂不支持通过@用户名查询，请使用用户ID")
             else:
                 target_user_id = int(arg)
         except ValueError:
-            await update.message.reply_text("❌ 无效的用户ID")
-            return
+            return await update.message.reply_text("❌ 无效的用户ID")
     
     if not target_user_id:
-        await update.message.reply_text("❌ 无法获取用户信息")
-        return
+        return await update.message.reply_text("❌ 无法获取用户信息")
     
     with Session(engine) as session:
         from sqlmodel import select, and_
@@ -81,8 +78,7 @@ async def points_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         group = session.exec(statement).first()
         
         if not group or not group.is_initialized:
-            await update.message.reply_text("❌ 群组未初始化")
-            return
+            return await update.message.reply_text("❌ 群组未初始化")
         
         # 获取积分
         user_points = points_service.get_or_create_user_points(session, group.id, target_user_id)
@@ -102,11 +98,11 @@ async def points_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         message += f"💰 总积分: {user_points.total_points}\n"
         message += f"📅 今日消息积分: {user_points.message_points_today}/{points_service.POINTS_MESSAGE_DAILY_MAX}"
         
-        await update.message.reply_text(message)
+        return await update.message.reply_text(message)
 
 
 async def points_rank_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """积分排行榜: /kobe_points_rank"""
+    """积分排行榜: /points_rank"""
     if not update.effective_chat:
         return
     
@@ -120,8 +116,7 @@ async def points_rank_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         group = session.exec(statement).first()
         
         if not group or not group.is_initialized:
-            await update.message.reply_text("❌ 群组未初始化")
-            return
+            return await update.message.reply_text("❌ 群组未初始化")
         
         # 获取排行榜
         rank_data = points_service.get_points_rank(session, group.id, limit=10)
@@ -155,7 +150,7 @@ async def points_rank_command(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 
 async def points_rules_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """积分规则说明: /kobe_points_rules"""
+    """积分规则说明: /points_rules"""
     rules_text = f"""
 📖 积分系统规则
 
@@ -175,9 +170,9 @@ async def points_rules_command(update: Update, context: ContextTypes.DEFAULT_TYP
    • 连续签到有额外加成
    • 例：连续3天签到可获得 {points_service.POINTS_CHECKIN_BASE + 2} 分
 
-💡 使用 /kobe_checkin 签到
-💡 使用 /kobe_points 查看积分
-💡 使用 /kobe_points_rank 查看排行榜
+💡 使用 /checkin 签到
+💡 使用 /points 查看积分
+💡 使用 /points_rank 查看排行榜
 """
     
     await update.message.reply_text(rules_text)

@@ -13,6 +13,7 @@ from app.models import Resource, Category, Tag, ResourceTag
 from app.services.resource_service import ResourceService, CategoryService, TagService
 from app.services.points_service import PointsService
 from app.utils.message_utils import is_real_reply
+from app.utils.auto_delete import auto_delete_message
 
 SELECTING_CATEGORY, SELECTING_TAGS, ENTERING_DESCRIPTION, CREATING_CATEGORY, CREATING_TAG = range(5)
 TEMP_RESOURCE_DATA = "temp_resource_data"
@@ -520,13 +521,13 @@ async def add_tag_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(f"❌ 标签已存在: #{name}")
 
 
+@auto_delete_message(delay=30)
 async def list_categories_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     with Session(engine) as session:
         categories = CategoryService.get_categories(session, update.effective_chat.id)
         
         if not categories:
-            await update.message.reply_text("该群组还没有分类")
-            return
+            return await update.message.reply_text("该群组还没有分类")
         
         text = "📂 <b>所有分类</b>\n\n"
         for cat in categories:
@@ -535,7 +536,7 @@ async def list_categories_command(update: Update, context: ContextTypes.DEFAULT_
                 text += f" - {cat.description}"
             text += f" (ID: {cat.id})\n"
         
-        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+        return await update.message.reply_text(text, parse_mode=ParseMode.HTML)
 
 
 async def list_tags_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
