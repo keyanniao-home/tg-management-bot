@@ -201,9 +201,25 @@ async def category_management_callback(
             category = session.get(Category, category_id)
             if category:
                 name = category.name
+                
+                # 级联删除：先删除该分类下的所有资源
+                resources_to_delete = session.exec(
+                    select(Resource).where(Resource.category_id == category_id)
+                ).all()
+                
+                deleted_count = 0
+                for resource in resources_to_delete:
+                    session.delete(resource)
+                    deleted_count += 1
+                
+                # 然后删除分类本身
                 session.delete(category)
                 session.commit()
-                await query.edit_message_text(f"✅ 分类「{name}」已删除")
+                
+                if deleted_count > 0:
+                    await query.edit_message_text(f"✅ 分类「{name}」已删除（含 {deleted_count} 个资源）")
+                else:
+                    await query.edit_message_text(f"✅ 分类「{name}」已删除")
             else:
                 await query.edit_message_text("❌ 分类不存在")
 
