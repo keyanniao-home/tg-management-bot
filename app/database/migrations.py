@@ -770,6 +770,260 @@ class Migration006_FixDMRelayBigInt(Migration):
         raise NotImplementedError("不建议回滚此迁移")
 
 
+class Migration007_AddBinManagementTables(Migration):
+    """
+    迁移007: 添加BIN管理系统相关表
+
+    变更内容:
+    - 创建 bin_configs 表（BIN监听配置）
+    - 创建 bin_cards 表（BIN卡信息）
+    - 创建 bin_sites 表（BIN对应的网站信息）
+    """
+
+    def __init__(self):
+        super().__init__(
+            version=7,
+            description="Add BIN management system tables (bin_configs, bin_cards, bin_sites)"
+        )
+
+    def check(self, session: Session) -> bool:
+        """检查BIN管理表是否需要创建"""
+        try:
+            inspector = inspect(engine)
+            tables = inspector.get_table_names()
+
+            # 只要有一个表不存在就需要执行迁移
+            required_tables = ['bin_configs', 'bin_cards', 'bin_sites']
+            missing_tables = [t for t in required_tables if t not in tables]
+
+            if missing_tables:
+                logger.warning(f"检测到缺失的BIN管理表: {', '.join(missing_tables)}")
+                return True
+            else:
+                logger.info("BIN管理相关表已存在")
+                return False
+
+        except Exception as e:
+            logger.error(f"检查迁移状态失败: {e}")
+            return False
+
+    def execute(self, session: Session):
+        """执行迁移"""
+        logger.info("=" * 80)
+        logger.info(f"开始执行迁移 #{self.version}: {self.description}")
+        logger.info("=" * 80)
+
+        try:
+            # 1. 创建 bin_configs 表
+            logger.info("Step 1/3: 创建 bin_configs 表...")
+            session.exec(text("""
+                CREATE TABLE IF NOT EXISTS bin_configs (
+                    id SERIAL PRIMARY KEY,
+                    group_id INTEGER NOT NULL REFERENCES group_configs(id),
+                    topic_id BIGINT NOT NULL,
+                    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+                    ai_prompt TEXT,
+                    created_at TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMP NOT NULL
+                );
+
+                CREATE INDEX IF NOT EXISTS ix_bin_configs_group_id ON bin_configs(group_id);
+                CREATE INDEX IF NOT EXISTS ix_bin_configs_topic_id ON bin_configs(topic_id);
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_bin_config_group_topic
+                    ON bin_configs(group_id, topic_id);
+            """))
+            session.commit()
+            logger.info("✅ bin_configs 表已创建")
+
+            # 2. 创建 bin_cards 表
+            logger.info("Step 2/3: 创建 bin_cards 表...")
+            session.exec(text("""
+                CREATE TABLE IF NOT EXISTS bin_cards (
+                    id SERIAL PRIMARY KEY,
+                    group_id INTEGER NOT NULL REFERENCES group_configs(id),
+                    topic_id BIGINT NOT NULL,
+                    message_id BIGINT NOT NULL,
+                    sender_user_id BIGINT,
+                    sender_username VARCHAR(100),
+                    sender_chat_id BIGINT,
+                    rule VARCHAR(50) NOT NULL,
+                    rule_prefix VARCHAR(8) NOT NULL,
+                    ip_requirement VARCHAR(100),
+                    credits VARCHAR(100),
+                    notes TEXT,
+                    original_text TEXT NOT NULL,
+                    created_at TIMESTAMP NOT NULL
+                );
+
+                CREATE INDEX IF NOT EXISTS ix_bin_cards_group_id ON bin_cards(group_id);
+                CREATE INDEX IF NOT EXISTS ix_bin_cards_topic_id ON bin_cards(topic_id);
+                CREATE INDEX IF NOT EXISTS ix_bin_cards_sender_user_id ON bin_cards(sender_user_id);
+                CREATE INDEX IF NOT EXISTS ix_bin_cards_sender_username ON bin_cards(sender_username);
+                CREATE INDEX IF NOT EXISTS ix_bin_cards_rule ON bin_cards(rule);
+                CREATE INDEX IF NOT EXISTS ix_bin_cards_rule_prefix ON bin_cards(rule_prefix);
+                CREATE INDEX IF NOT EXISTS idx_bin_card_group_rule ON bin_cards(group_id, rule);
+                CREATE INDEX IF NOT EXISTS idx_bin_card_group_prefix ON bin_cards(group_id, rule_prefix);
+            """))
+            session.commit()
+            logger.info("✅ bin_cards 表已创建")
+
+            # 3. 创建 bin_sites 表
+            logger.info("Step 3/3: 创建 bin_sites 表...")
+            session.exec(text("""
+                CREATE TABLE IF NOT EXISTS bin_sites (
+                    id SERIAL PRIMARY KEY,
+                    bin_card_id INTEGER NOT NULL REFERENCES bin_cards(id) ON DELETE CASCADE,
+                    site_name VARCHAR(100) NOT NULL,
+                    site_domain VARCHAR(200) NOT NULL
+                );
+
+                CREATE INDEX IF NOT EXISTS ix_bin_sites_bin_card_id ON bin_sites(bin_card_id);
+                CREATE INDEX IF NOT EXISTS ix_bin_sites_site_name ON bin_sites(site_name);
+                CREATE INDEX IF NOT EXISTS ix_bin_sites_site_domain ON bin_sites(site_domain);
+                CREATE INDEX IF NOT EXISTS idx_bin_site_card_domain ON bin_sites(bin_card_id, site_domain);
+            """))
+            session.commit()
+            logger.info("✅ bin_sites 表已创建")
+
+            # 验证
+            logger.info("验证迁移结果...")
+            inspector = inspect(engine)
+            tables = inspector.get_table_names()
+
+            required_tables = ['bin_configs', 'bin_cards', 'bin_sites']
+            if all(t in tables for t in required_tables):
+                logger.info("✅ 验证通过，所有BIN管理表已创建")
+            else:
+                raise Exception("验证失败: 部分BIN管理表未创建成功")
+
+            logger.info("=" * 80)
+            logger.success(f"🎉 迁移 #{self.version} 执行成功！")
+            logger.info("=" * 80)
+
+        except Exception as e:
+            logger.error(f"❌ 迁移失败: {e}")
+            session.rollback()
+            logger.error("⚠️ 事务已回滚")
+            raise
+
+    def rollback(self, session: Session):
+        """回滚迁移"""
+        logger.info("回滚迁移007: 删除BIN管理相关表")
+        session.exec(text("""
+            DROP TABLE IF EXISTS bin_sites CASCADE;
+            DROP TABLE IF EXISTS bin_cards CASCADE;
+            DROP TABLE IF EXISTS bin_configs CASCADE;
+        """))
+        session.commit()
+        logger.info("✅ 回滚完成")
+
+
+class Migration008_AddBinInfoFields(Migration):
+    """
+    迁移008: 为 bin_cards 表添加 BIN 信息字段
+
+    变更内容:
+    - 添加 bin_scheme (卡组织)
+    - 添加 bin_type (卡类型)
+    - 添加 bin_brand (卡品牌)
+    - 添加 bin_country (发卡国家)
+    - 添加 bin_country_emoji (国家旗帜emoji)
+    - 添加 bin_bank (发卡银行)
+    """
+
+    def __init__(self):
+        super().__init__(
+            version=8,
+            description="Add BIN information fields to bin_cards table"
+        )
+
+    def check(self, session: Session) -> bool:
+        """检查 bin_cards 表是否缺少 BIN 信息字段"""
+        try:
+            inspector = inspect(engine)
+
+            # 检查表是否存在
+            if 'bin_cards' not in inspector.get_table_names():
+                logger.info("bin_cards 表不存在，跳过迁移")
+                return False
+
+            # 检查字段是否存在
+            columns = inspector.get_columns('bin_cards')
+            column_names = [col['name'] for col in columns]
+
+            required_fields = ['bin_scheme', 'bin_type', 'bin_brand', 'bin_country', 'bin_country_emoji', 'bin_bank']
+            missing_fields = [f for f in required_fields if f not in column_names]
+
+            if missing_fields:
+                logger.warning(f"检测到 bin_cards 表缺少 BIN 信息字段: {', '.join(missing_fields)}")
+                return True
+            else:
+                logger.info("bin_cards 表已包含所有 BIN 信息字段")
+                return False
+
+        except Exception as e:
+            logger.error(f"检查迁移状态失败: {e}")
+            return False
+
+    def execute(self, session: Session):
+        """执行迁移"""
+        logger.info("=" * 80)
+        logger.info(f"开始执行迁移 #{self.version}: {self.description}")
+        logger.info("=" * 80)
+
+        try:
+            # 添加 BIN 信息字段
+            logger.info("添加 BIN 信息字段...")
+            session.exec(text("""
+                ALTER TABLE bin_cards
+                ADD COLUMN IF NOT EXISTS bin_scheme VARCHAR(50),
+                ADD COLUMN IF NOT EXISTS bin_type VARCHAR(50),
+                ADD COLUMN IF NOT EXISTS bin_brand VARCHAR(100),
+                ADD COLUMN IF NOT EXISTS bin_country VARCHAR(100),
+                ADD COLUMN IF NOT EXISTS bin_country_emoji VARCHAR(10),
+                ADD COLUMN IF NOT EXISTS bin_bank VARCHAR(200);
+            """))
+            session.commit()
+            logger.info("✅ BIN 信息字段已添加")
+
+            # 验证
+            logger.info("验证迁移结果...")
+            inspector = inspect(engine)
+            columns = inspector.get_columns('bin_cards')
+            column_names = [col['name'] for col in columns]
+
+            required_fields = ['bin_scheme', 'bin_type', 'bin_brand', 'bin_country', 'bin_country_emoji', 'bin_bank']
+            if all(f in column_names for f in required_fields):
+                logger.info("✅ 验证通过，所有 BIN 信息字段已添加")
+            else:
+                raise Exception("验证失败: 部分 BIN 信息字段未添加成功")
+
+            logger.info("=" * 80)
+            logger.success(f"🎉 迁移 #{self.version} 执行成功！")
+            logger.info("=" * 80)
+
+        except Exception as e:
+            logger.error(f"❌ 迁移失败: {e}")
+            session.rollback()
+            logger.error("⚠️ 事务已回滚")
+            raise
+
+    def rollback(self, session: Session):
+        """回滚迁移"""
+        logger.info("回滚迁移008: 删除 bin_cards 表的 BIN 信息字段")
+        session.exec(text("""
+            ALTER TABLE bin_cards
+            DROP COLUMN IF EXISTS bin_scheme,
+            DROP COLUMN IF EXISTS bin_type,
+            DROP COLUMN IF EXISTS bin_brand,
+            DROP COLUMN IF EXISTS bin_country,
+            DROP COLUMN IF EXISTS bin_country_emoji,
+            DROP COLUMN IF EXISTS bin_bank;
+        """))
+        session.commit()
+        logger.info("✅ 回滚完成")
+
+
 # 注册所有迁移
 ALL_MIGRATIONS = [
     Migration001_RemoveChannelBindingGroupId(),
@@ -778,6 +1032,8 @@ ALL_MIGRATIONS = [
     Migration004_AddScammerDetectionRecords(),
     Migration005_AddCrawlTaskStatusFields(),
     Migration006_FixDMRelayBigInt(),
+    Migration007_AddBinManagementTables(),
+    Migration008_AddBinInfoFields(),
 ]
 
 

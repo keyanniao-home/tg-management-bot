@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     # 积分系统配置
     points_enabled: bool = True
 
+    # BIN信息查询API
+    bin_info_url: str = "https://bin.keyanniao.com/bin"
+
     database_host: str = "localhost"
     database_port: int = 5432
     database_name: str = "telegram_group_management"

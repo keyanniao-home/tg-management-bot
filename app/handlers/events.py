@@ -340,14 +340,20 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"(bot_msg_id={bot_msg_id}, user={update.effective_user.id})"
                 )
                 try:
+                    # 保存消息ID（处理器可能会修改update.message）
+                    user_message_id = update.message.message_id
+                    chat_id = update.effective_chat.id
+
                     # 调用对应的处理器
                     await handler_info.handler(update, context)
+                    import asyncio
+
                     # 标记用户消息，120s后删除
                     asyncio.create_task(
-                        _delete_user_reply_later(context.bot, update.effective_chat.id, update.message.message_id)
+                        _delete_user_reply_later(context.bot, chat_id, user_message_id)
                     )
                 except Exception as e:
-                    logger.exception(f"回复处理器执行失败: ",e)
+                    logger.exception(f"回复处理器执行失败: {e}")
                 return
 
     # 检查是否是回复确认消息（只有文本消息且用户可以确认）
@@ -581,6 +587,30 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         message_text=message_text,
                     )
                 logger.debug(f"DM detected: user={user_id}, keywords={keywords}")
+
+        # BIN检测：检测话题中的BIN信息
+        if message_text and is_topic_message and topic_id:
+            from app.services.bin.detector import BinDetector
+
+            # 同步检查是否启用监听（快速判断）
+            if BinDetector.is_monitoring_enabled(session, group.id, topic_id):
+                # 检测是否包含可能的BIN
+                if BinDetector.contains_possible_bin(message_text):
+                    # 异步处理BIN解析（不阻塞消息处理）
+                    import asyncio
+                    asyncio.create_task(
+                        BinDetector.process_bin_message(
+                            bot=context.bot,
+                            chat_id=update.effective_chat.id,
+                            group_db_id=group.id,  # 使用数据库ID，非Telegram ID
+                            topic_id=topic_id,
+                            message_id=update.message.message_id,
+                            message_text=message_text,
+                            sender_user_id=user_id if not is_channel else None,
+                            sender_username=update.effective_user.username if not is_channel else None,
+                            sender_chat_id=update.message.sender_chat.id if is_channel else None
+                        )
+                    )
 
 
 async def _batch_kick_users(

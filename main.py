@@ -91,6 +91,12 @@ from app.handlers.resource_management_handlers import (
     manage_resources_command,
     manage_resources_callback,
 )
+from app.handlers.bin_handlers import (
+    bin_monitor_command,
+    bin_search_command,
+    bin_browse_command,
+    bin_search_callback,
+)
 
 from app.services.image_queue import image_queue
 from app.services.image_detector import image_detector
@@ -251,6 +257,12 @@ def main():
     application.add_handler(
         MessageHandler(filters.Regex(r"^/get_\d+"), get_resource_command)
     )
+
+    # BIN管理功能
+    application.add_handler(CommandHandler("bin_monitor", bin_monitor_command))
+    application.add_handler(CommandHandler("bin_search", bin_search_command))
+    application.add_handler(CommandHandler("bin_browse", bin_browse_command))
+    application.add_handler(CallbackQueryHandler(bin_search_callback, pattern="^bin_"))
 
     # 注册回调查询处理器（分页按钮）
     application.add_handler(

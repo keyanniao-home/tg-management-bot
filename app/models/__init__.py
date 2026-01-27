@@ -15,6 +15,9 @@ from app.models.category import Category
 from app.models.tag import Tag
 from app.models.resource import Resource, ResourceTag, ResourceEdit
 from app.models.dm_relay import DMRelay, DMReadReceipt
+from app.models.bin_config import BinConfig
+from app.models.bin_card import BinCard
+from app.models.bin_site import BinSite
 
 __all__ = [
     "GroupConfig",
@@ -43,5 +46,9 @@ __all__ = [
     "DMRelay",
     "DMReadReceipt",
     "DigestConfig",
+    # BIN管理模型
+    "BinConfig",
+    "BinCard",
+    "BinSite",
 ]
 
