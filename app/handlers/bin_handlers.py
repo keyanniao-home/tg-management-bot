@@ -110,11 +110,14 @@ async def bin_monitor_command(update: Update, context: ContextTypes.DEFAULT_TYPE
 
         elif action == "status":
             if config and config.enabled:
+                # 转换为中国时区（UTC+8）
+                from datetime import timedelta
+                cst_time = config.created_at + timedelta(hours=8)
                 status_text = (
                     "**BIN监听状态**\n\n"
                     f"话题ID: `{topic_id}`\n"
                     f"状态: ✅ 已启用\n"
-                    f"启用时间: {config.created_at.strftime('%Y-%m-%d %H:%M')}\n"
+                    f"启用时间: {cst_time.strftime('%Y-%m-%d %H:%M')}\n"
                 )
                 if config.ai_prompt:
                     status_text += "\n使用自定义AI提示词"
@@ -976,7 +979,10 @@ async def show_bin_detail(update: Update, context: ContextTypes.DEFAULT_TYPE, bi
         if bin_card.sender_username:
             text += f"**发送者**: @{bin_card.sender_username}\n"
 
-        text += f"\n**记录时间**: {bin_card.created_at.strftime('%Y-%m-%d %H:%M')}\n"
+        # 转换为中国时区（UTC+8）
+        from datetime import timedelta
+        cst_time = bin_card.created_at + timedelta(hours=8)
+        text += f"\n**记录时间**: {cst_time.strftime('%Y-%m-%d %H:%M')}\n"
 
         # 根据来源构建返回按钮
         keyboard = [
