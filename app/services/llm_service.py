@@ -14,6 +14,8 @@ class LLMService:
     
     def __init__(self):
         self.client: Optional[AsyncOpenAI] = None
+
+
         self.is_enabled = settings.is_llm_configured
         
         if self.is_enabled:
@@ -57,26 +59,58 @@ class LLMService:
             ])
             
             # 限制消息长度（避免超token）
-            max_content_chars = 8000
+            max_content_chars = 18000
             if len(message_text) > max_content_chars:
                 message_text = message_text[:max_content_chars] + "\n... (消息过多，已截断)"
             
             # 构建提示词
-            system_prompt = """你是一个专业的群聊消息总结助手。
-请对以下技术群的聊天记录进行简洁、准确的总结。
-总结要求：
-1. 使用中文
-2. 按主题分类归纳讨论的要点
-3. 突出重要信息（如技术方案、资源分享、问题解答等）
-4. 保持简洁，控制在300字以内
-5. 直接输出Markdown格式文本，使用bullet points（-）、粗体（**文本**）等基础语法
-6. 不要使用代码块（```）包裹输出内容，Telegram会自动渲染Markdown"""
+            system_prompt = """你是一个专业的群聊消息总结助手，擅长从大量对话中提取关键信息并结构化呈现。
 
-            user_prompt = f"""请总结以下聊天记录：
+**核心任务**：分析群聊记录，生成清晰、有价值的总结,让用户快速了解错过的讨论内容。
+
+**总结原则**：
+1. **智能筛选**：自动忽略闲聊、表情、无意义的短消息（如"哈哈"、"好的"、"+1"等）
+2. **主题聚合**：识别并归类不同的讨论主题，即使话题交叉出现也要准确分组
+3. **人物追踪**：标注每个话题的主要参与者和关键贡献
+4. **价值优先**：突出问题、解决方案、决策、资源链接、时间节点等高价值信息
+
+**输出格式**：
+- 使用中文
+- 采用Markdown格式（bullet points用"-"，粗体用**文本**）
+- 不使用代码块包裹（```），让Telegram直接渲染
+- 控制在400字以内，确保简洁但信息完整
+
+**结构模板**：
+📊 **消息概览**：共X条消息，X人参与
+
+🔥 **核心话题**
+- **[话题1名称]**：简述讨论内容（主要参与者：@用户A、@用户B）
+  - 关键点1
+  - 关键点2（如有解决方案或结论）
+  
+💡 **重要信息**
+- 资源/链接/文件分享
+- 待办事项或决策
+- 时间安排
+
+👥 **活跃成员**：@用户A（主要讨论X）、@用户B（分享了Y）
+
+⚠️ **需要关注**：未解决的问题或后续事项（如有）
+"""
+
+            context_info = f"\n\n背景信息：{context}" if context else ""
+            user_prompt = f"""请分析以下群聊记录并生成结构化总结：
 
 {message_text}
 
-{f'背景信息：{context}' if context else ''}"""
+**分析要点**：
+1. 识别出所有不同的讨论主题（技术问题、方案讨论、资源分享、日常交流等）
+2. 过滤掉纯闲聊、重复确认、无实质内容的消息
+3. 标注每个话题的关键参与者
+4. 提取可执行信息（链接、时间、待办等）
+5. 如果有问答，明确标出问题是否得到解答
+
+直接输出总结，无需额外说明。{context_info}"""
 
             # 调用LLM
             response = await self.client.chat.completions.create(
